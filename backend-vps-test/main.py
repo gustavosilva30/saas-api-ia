@@ -280,6 +280,43 @@ def get_current_org_id(credentials: HTTPAuthorizationCredentials = Depends(secur
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido.")
 
+def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Acesso negado (apenas superadmin).")
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido.")
+
+@app.get("/admin/organizations", tags=["Admin"], summary="Listar Todas as Empresas")
+def admin_list_organizations(admin_payload: dict = Depends(get_current_admin)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT o.id, o.name, o.plan, o.credits_balance, o.status, 
+                   COUNT(u.id) as users_count
+            FROM organizations o
+            LEFT JOIN users u ON o.id = u.organization_id
+            GROUP BY o.id
+            ORDER BY o.name ASC;
+        """)
+        orgs = cur.fetchall()
+        
+        # Transformar UUID para string pra não quebrar o JSON serializer
+        for org in orgs:
+            org['id'] = str(org['id'])
+            
+        return orgs
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 class RegisterPayload(BaseModel):
     name: str

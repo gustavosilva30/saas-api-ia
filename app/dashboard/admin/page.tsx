@@ -26,9 +26,16 @@ export default function AdminPage() {
     }
   }, [router])
 
-  const tenants = [];
-  const payments = [];
+  const [tenants, setTenants] = React.useState<any[]>([])
+  const [payments, setPayments] = React.useState<any[]>([])
 
+  React.useEffect(() => {
+    if (isAuthorized) {
+      import("@/lib/api").then(({ api }) => {
+        api.getAdminOrganizations().then((data) => setTenants(data))
+      })
+    }
+  }, [isAuthorized])
   if (isAuthorized === null) {
     return (
       <div className="flex h-[50vh] items-center justify-center">

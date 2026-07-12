@@ -98,6 +98,17 @@ export const api = {
     await delay(400)
     return mock.metrics
   },
+
+  // Admin
+  async getAdminOrganizations() {
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+    const response = await fetch(`${API_BASE}/admin/organizations`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!response.ok) return [];
+    return response.json();
+  },
+
   async getTimeSeries() {
     await delay(400)
     return mock.timeSeries
