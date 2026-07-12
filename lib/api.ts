@@ -82,8 +82,16 @@ export const api = {
     const formData = new FormData()
     formData.append("file", file)
 
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`
+    }
+
     const response = await fetch(`${API_BASE}/remove-bg`, {
       method: "POST",
+      headers,
       body: formData,
     })
 
@@ -115,25 +123,60 @@ export const api = {
     return mock.apiRequests
   },
   async getApiKeys() {
-    await delay(400)
-    return mock.apiKeys
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const res = await fetch(`${API_BASE}/api-keys`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    return res.json()
   },
-  async createApiKey(name: string): Promise<ApiKey> {
-    await delay(600)
-    return {
-      id: `key_${Math.random().toString(36).slice(2, 6)}`,
-      name,
-      prefix: "sk_live_" + Math.random().toString(36).slice(2, 6),
-      secret: "sk_live_" + Math.random().toString(36).slice(2).padEnd(32, "0"),
-      scopes: ["images:write", "images:read"],
-      createdAt: new Date().toISOString(),
-      lastUsedAt: null,
-      revoked: false,
-    }
+  async createApiKey(name: string): Promise<any> {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const res = await fetch(`${API_BASE}/api-keys`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}` 
+      },
+      body: JSON.stringify({ name })
+    })
+    return res.json()
   },
-  async revokeApiKey(_id: string) {
-    await delay(400)
-    return { ok: true }
+  async revokeApiKey(id: string) {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const res = await fetch(`${API_BASE}/api-keys/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    return res.json()
+  },
+  
+  // Webhooks
+  async getWebhooks() {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const res = await fetch(`${API_BASE}/webhooks`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    return res.json()
+  },
+  async createWebhook(url: string): Promise<any> {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const res = await fetch(`${API_BASE}/webhooks`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}` 
+      },
+      body: JSON.stringify({ url })
+    })
+    return res.json()
+  },
+  async deleteWebhook(id: string) {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const res = await fetch(`${API_BASE}/webhooks/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    return res.json()
   },
 
   // Billing & credits

@@ -4,11 +4,14 @@ import jwt
 import bcrypt
 import psycopg2
 import requests
+import secrets
+import hashlib
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from rembg import remove, new_session
 from PIL import Image
@@ -110,6 +113,19 @@ def startup_db_setup():
         conn = get_db_connection()
         cur = conn.cursor()
         
+        # 0. Garantir a criação da tabela webhooks se não existir
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS webhooks (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                url TEXT NOT NULL,
+                secret VARCHAR(255) NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+
         # 1. Garantir que a organização do Super Admin existe
         cur.execute("SELECT id FROM organizations WHERE name = 'GSN Tech' LIMIT 1;")
         org = cur.fetchone()
@@ -142,6 +158,42 @@ def startup_db_setup():
         conn.close()
     except Exception as e:
         print(f"Erro ao inicializar banco de dados / seeding: {e}")
+
+# Autenticação dupla: JWT do Painel ou API Key
+security = HTTPBearer()
+
+def get_current_org_id(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    # Se for uma API Key
+    if token.startswith("sk_live_"):
+        key_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT organization_id, id FROM api_keys WHERE key_hash = %s LIMIT 1;", (key_hash,))
+        res = cur.fetchone()
+        if not res:
+            cur.close()
+            conn.close()
+            raise HTTPException(status_code=401, detail="API Key inválida.")
+        
+        # Atualizar last_used_at
+        cur.execute("UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = %s;", (res[1],))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return str(res[0])
+    
+    # Se for um JWT do Dashboard
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") == "verify_email":
+            raise HTTPException(status_code=401, detail="Token inválido para esta operação.")
+        return payload.get("org_id")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido.")
+
 
 # Pydantic Schemas para Validação
 class RegisterPayload(BaseModel):
@@ -321,7 +373,11 @@ def read_root():
     return {"status": "online", "message": "API de Remoção de Fundo funcionando com sucesso."}
 
 @app.post("/remove-bg")
-async def remove_background(file: UploadFile = File(...), tier: str = Form("basic")):
+async def remove_background(
+    file: UploadFile = File(...), 
+    tier: str = Form("basic"), 
+    org_id: str = Depends(get_current_org_id)
+):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
     
@@ -355,7 +411,118 @@ async def remove_background(file: UploadFile = File(...), tier: str = Form("basi
                 session=session
             )
         
+        # Disparar webhooks de sucesso de forma assíncrona (na prática deveria usar BackgroundTasks)
+        # Aqui fazemos de forma simples e direta para o teste
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT url FROM webhooks WHERE organization_id = %s AND is_active = TRUE;", (org_id,))
+            hooks = cur.fetchall()
+            cur.close()
+            conn.close()
+            for h in hooks:
+                try:
+                    requests.post(h[0], json={"event": "image.processed", "status": "success", "tier": tier}, timeout=2)
+                except:
+                    pass
+        except:
+            pass
+
         return StreamingResponse(io.BytesIO(output_image_bytes), media_type="image/png")
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao processar imagem: {str(e)}")
+
+# API Keys Endpoints
+class CreateApiKeyPayload(BaseModel):
+    name: str
+
+@app.get("/api-keys")
+def get_api_keys(org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT id, name, prefix, last_used_at, created_at FROM api_keys WHERE organization_id = %s ORDER BY created_at DESC;", (org_id,))
+    keys = cur.fetchall()
+    cur.close()
+    conn.close()
+    return keys
+
+@app.post("/api-keys")
+def create_api_key(payload: CreateApiKeyPayload, org_id: str = Depends(get_current_org_id)):
+    raw_key = "sk_live_" + secrets.token_hex(24)
+    key_hash = hashlib.sha256(raw_key.encode('utf-8')).hexdigest()
+    prefix = raw_key[:12] + "..."
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO api_keys (organization_id, name, key_hash, prefix) VALUES (%s, %s, %s, %s) RETURNING id, created_at;",
+        (org_id, payload.name, key_hash, prefix)
+    )
+    res = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return {
+        "id": res[0],
+        "name": payload.name,
+        "prefix": prefix,
+        "secret": raw_key,
+        "created_at": res[1]
+    }
+
+@app.delete("/api-keys/{key_id}")
+def delete_api_key(key_id: str, org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM api_keys WHERE id = %s AND organization_id = %s;", (key_id, org_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "API Key revogada."}
+
+# Webhooks Endpoints
+class CreateWebhookPayload(BaseModel):
+    url: str
+
+@app.get("/webhooks")
+def get_webhooks(org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT id, url, is_active, created_at FROM webhooks WHERE organization_id = %s ORDER BY created_at DESC;", (org_id,))
+    hooks = cur.fetchall()
+    cur.close()
+    conn.close()
+    return hooks
+
+@app.post("/webhooks")
+def create_webhook(payload: CreateWebhookPayload, org_id: str = Depends(get_current_org_id)):
+    secret = "whsec_" + secrets.token_hex(16)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO webhooks (organization_id, url, secret) VALUES (%s, %s, %s) RETURNING id, created_at;",
+        (org_id, payload.url, secret)
+    )
+    res = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return {
+        "id": res[0],
+        "url": payload.url,
+        "is_active": True,
+        "created_at": res[1]
+    }
+
+@app.delete("/webhooks/{webhook_id}")
+def delete_webhook(webhook_id: str, org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM webhooks WHERE id = %s AND organization_id = %s;", (webhook_id, org_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "Webhook deletado."}
