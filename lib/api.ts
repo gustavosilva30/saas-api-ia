@@ -124,7 +124,7 @@ export const api = {
     const processedFile = await compressImage(file);
     
     const formData = new FormData()
-    formData.append("image", processedFile)
+    formData.append("file", processedFile)
 
     const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
     const headers: Record<string, string> = {}
@@ -132,7 +132,7 @@ export const api = {
       headers["Authorization"] = `Bearer ${token}`
     }
 
-    const response = await fetch('/api/studio/remove-bg', {
+    const response = await fetch(`${API_BASE}/remove-bg`, {
       method: "POST",
       headers,
       body: formData,

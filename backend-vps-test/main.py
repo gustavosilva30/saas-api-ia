@@ -30,8 +30,21 @@ from slowapi.errors import RateLimitExceeded
 limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
-    title="API de Remoção de Fundo de Imagem",
-    description="Microserviço de IA para remover fundo de imagens e retornar em formato PNG transparente.",
+    title="Motion Studio & AI API",
+    description="""
+API Oficial de Inteligência Artificial para Remoção de Fundo, Análise Visual e Copywriting.
+
+## Autenticação
+As requisições devem ser autenticadas enviando um token no cabeçalho `Authorization: Bearer <SEU_TOKEN>`.
+Para integrações externas, utilize a API Key gerada no painel (`sk_live_...`).
+
+## Custos por Tier
+- **Remoção Basic**: 1 crédito
+- **Remoção Pro**: 3 créditos (Exige plano Pro/Premium)
+- **Remoção Premium**: 5 créditos (Exige plano Premium)
+- **Análise de Campanha (Visual)**: 2 créditos
+- **Geração de Copy**: 1 crédito
+    """,
     version="1.0.0"
 )
 
@@ -285,7 +298,7 @@ class LoginPayload(BaseModel):
     email: EmailStr
     password: str
 
-@app.post("/auth/register")
+@app.post("/auth/register", tags=["Autenticação"], summary="Registrar nova organização")
 @limiter.limit("3/minute")
 def register_user(request: Request, payload: RegisterPayload):
     if not DATABASE_URL:
@@ -335,7 +348,7 @@ def register_user(request: Request, payload: RegisterPayload):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro no cadastro: {str(e)}")
 
-@app.post("/auth/login")
+@app.post("/auth/login", tags=["Autenticação"], summary="Realizar Login")
 @limiter.limit("5/minute")
 def login_user(request: Request, payload: LoginPayload):
     if not DATABASE_URL:
@@ -480,7 +493,7 @@ def dispatch_webhooks(org_id: str, tier: str):
     except Exception:
         pass
 
-@app.post("/remove-bg")
+@app.post("/remove-bg", tags=["IA Síncrona"], summary="Remover Fundo (Uso Interno Dashboard)")
 @limiter.limit("20/minute")
 async def remove_background(
     request: Request,
@@ -684,7 +697,7 @@ def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_p
         except:
             pass
 
-@app.post("/jobs", status_code=202)
+@app.post("/jobs", status_code=202, tags=["IA Assíncrona"], summary="Criar Job Assíncrono", description="Cria um processamento pesado na fila. Use GET /jobs/{id} para checar o status e receber a URL via Webhook.")
 @limiter.limit("20/minute")
 async def create_job(
     request: Request,
@@ -756,7 +769,7 @@ async def create_job(
 class CampaignCopyPayload(BaseModel):
     category: str
 
-@app.post("/campaigns/analyze", status_code=202)
+@app.post("/campaigns/analyze", status_code=202, tags=["Campanhas AI"], summary="Analisar Imagem (Visão)", description="Utiliza VLM para descobrir a categoria de um produto. Processamento em Background.")
 @limiter.limit("20/minute")
 async def create_campaign_analyze_job(
     request: Request,
@@ -803,7 +816,7 @@ async def create_campaign_analyze_job(
     finally:
         conn.close()
 
-@app.post("/campaigns/generate-copy", status_code=202)
+@app.post("/campaigns/generate-copy", status_code=202, tags=["Campanhas AI"], summary="Gerar Copywriting (LLM)", description="Utiliza um LLM para gerar títulos, benefícios e legendas para redes sociais.")
 @limiter.limit("20/minute")
 async def create_campaign_copy_job(
     request: Request,
@@ -842,7 +855,7 @@ async def create_campaign_copy_job(
     finally:
         conn.close()
 
-@app.get("/jobs/{job_id}")
+@app.get("/jobs/{job_id}", tags=["IA Assíncrona"], summary="Verificar status do Job")
 def get_job_status(job_id: str, org_id: str = Depends(get_current_org_id)):
     conn = get_db_connection()
     try:
@@ -959,7 +972,7 @@ def get_webhooks(org_id: str = Depends(get_current_org_id)):
     conn.close()
     return hooks
 
-@app.post("/webhooks")
+@app.post("/webhooks", tags=["Webhooks"], summary="Registrar Webhook (Anti-SSRF)")
 def create_webhook(payload: CreateWebhookPayload, org_id: str = Depends(get_current_org_id)):
     if not is_valid_webhook_url(payload.url):
         raise HTTPException(status_code=400, detail="URL inválida ou não permitida (SSRF protection).")
