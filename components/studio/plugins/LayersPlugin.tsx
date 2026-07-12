@@ -5,11 +5,12 @@ import { useStudioStore } from "@/store/useStudioStore"
 import { EventBus, StudioEvent } from "@/lib/studio/events/EventBus"
 import { MoveLayerCommand } from "@/lib/studio/commands/MoveLayerCommand"
 import { DeleteObjectCommand } from "@/lib/studio/commands/DeleteObjectCommand"
+import { globalCommandManager } from "@/lib/studio/commands/GlobalCommandManager"
 import { Button } from "@/components/ui/button"
 
 function LayersSidebar() {
   const engine = useStudioStore((state) => state.engine)
-  const localCommandManager = useStudioStore((state) => state.localCommandManager)
+  const localCommandManager = globalCommandManager;
   const [layers, setLayers] = useState<any[]>([])
 
   const updateLayers = () => {

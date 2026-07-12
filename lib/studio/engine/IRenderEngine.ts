@@ -86,6 +86,17 @@ export interface IRenderEngine {
   bringForward(id: string): void;
   sendBackwards(id: string): void;
 
+  // Ajustes de Imagem Não Destrutivos
+  applyAdjustment(id: string, type: 'brightness' | 'contrast' | 'saturation' | 'hue' | 'curves', params: any): void;
+  getAdjustments(id: string): any;
+
+  // Seleções (Crop / Masking)
+  startSelection(type: 'rect' | 'ellipse' | 'lasso' | 'crop', options?: any): void;
+  stopSelection(): void;
+
+  // Blend Modes
+  setBlendMode(id: string, mode: string): void;
+
   // Exportação
   exportImage(options?: { format?: "png" | "jpeg"; quality?: number; multiplier?: number }): string;
 }

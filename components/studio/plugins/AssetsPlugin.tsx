@@ -9,7 +9,7 @@ import { CommandManager } from "@/lib/studio/commands/CommandManager"
 import { useAssetStore, AssetCategory } from "@/store/useAssetStore"
 import { cn } from "@/lib/utils"
 
-export const localCommandManager = new CommandManager();
+import { globalCommandManager } from "@/lib/studio/commands/GlobalCommandManager";
 
 const CATEGORIES: { id: AssetCategory; label: string; icon: React.ElementType }[] = [
   { id: "uploads", label: "Meus Uploads", icon: Folder },

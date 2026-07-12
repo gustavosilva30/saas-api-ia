@@ -32,6 +32,15 @@ from rembg import remove, new_session
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import psutil
+
+ai_semaphore = asyncio.Semaphore(2)
+
+ESTIMATED_COST_SECONDS = {
+    'bg-removal': 15,
+    'campaign-analyze': 20,
+    'campaign-copy': 2,
+}
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -603,6 +612,10 @@ async def remove_background(
     if len(input_image_bytes) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="O arquivo excede o limite de 20MB.")
         
+    image = Image.open(io.BytesIO(input_image_bytes))
+    if image.width > 2048 or image.height > 2048:
+        raise HTTPException(status_code=400, detail="A imagem excede o limite de 2048x2048 pixels.")
+        
     # 1. Definir custo
     costs = {"basic": 1, "pro": 3, "premium": 5}
     cost = costs.get(tier, 1)
@@ -643,22 +656,23 @@ async def remove_background(
             
         session = get_session(model_name)
         
-        if alpha_matting:
-            output_image_bytes = await asyncio.to_thread(
-                remove,
-                input_image_bytes,
-                session=session,
-                alpha_matting=True,
-                alpha_matting_foreground_threshold=240,
-                alpha_matting_background_threshold=10,
-                alpha_matting_erode_size=10
-            )
-        else:
-            output_image_bytes = await asyncio.to_thread(
-                remove, 
-                input_image_bytes, 
-                session=session
-            )
+        async with ai_semaphore:
+            if alpha_matting:
+                output_image_bytes = await asyncio.to_thread(
+                    remove,
+                    input_image_bytes,
+                    session=session,
+                    alpha_matting=True,
+                    alpha_matting_foreground_threshold=240,
+                    alpha_matting_background_threshold=10,
+                    alpha_matting_erode_size=10
+                )
+            else:
+                output_image_bytes = await asyncio.to_thread(
+                    remove, 
+                    input_image_bytes, 
+                    session=session
+                )
         
         # 4. Debitar Saldo
         if role != "superadmin":
@@ -769,7 +783,7 @@ def ollama_generate_copy(category: str):
     }
 
 # Job System Endpoints e Worker
-def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_path: str = None, category_arg: str = None):
+async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_path: str = None, category_arg: str = None):
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -794,14 +808,16 @@ def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_p
                 
             session = get_session(model_name)
             
-            if alpha_matting:
-                output_image_bytes = remove(
-                    input_image_bytes, session=session, alpha_matting=True,
-                    alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10,
-                    alpha_matting_erode_size=10
-                )
-            else:
-                output_image_bytes = remove(input_image_bytes, session=session)
+            async with ai_semaphore:
+                if alpha_matting:
+                    output_image_bytes = await asyncio.to_thread(
+                        remove,
+                        input_image_bytes, session=session, alpha_matting=True,
+                        alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10,
+                        alpha_matting_erode_size=10
+                    )
+                else:
+                    output_image_bytes = await asyncio.to_thread(remove, input_image_bytes, session=session)
                 
             output_filename = f"{job_id}_out.png"
             output_path = os.path.join("storage", output_filename)
@@ -814,11 +830,13 @@ def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_p
             with open(input_path, "rb") as f:
                 input_image_bytes = f.read()
             # Chama o modelo real de inferência que irá subir na VPS!
-            data = vision_analyze_real(input_image_bytes)
+            async with ai_semaphore:
+                data = await asyncio.to_thread(vision_analyze_real, input_image_bytes)
             result_data_str = json.dumps(data)
 
         elif job_type == 'campaign-copy':
-            data = ollama_generate_copy(category_arg or "Genérico")
+            async with ai_semaphore:
+                data = await asyncio.to_thread(ollama_generate_copy, category_arg or "Genérico")
             result_data_str = json.dumps(data)
         
         cur.execute("UPDATE jobs SET status = 'completed', result_url = %s, result_data = %s WHERE id = %s;", (result_url, result_data_str, job_id))
@@ -881,6 +899,10 @@ async def create_job(
         # Limite de Upload de 20MB
         if len(input_image_bytes) > 20 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="O arquivo excede o limite de 20MB.")
+            
+        image = Image.open(io.BytesIO(input_image_bytes))
+        if image.width > 2048 or image.height > 2048:
+            raise HTTPException(status_code=400, detail="A imagem excede o limite de 2048x2048 pixels.")
         
         if role != "superadmin":
             new_balance = balance - cost
@@ -952,6 +974,10 @@ async def create_campaign_analyze_job(
         # Limite de Upload de 20MB
         if len(input_image_bytes) > 20 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="O arquivo excede o limite de 20MB.")
+            
+        image = Image.open(io.BytesIO(input_image_bytes))
+        if image.width > 2048 or image.height > 2048:
+            raise HTTPException(status_code=400, detail="A imagem excede o limite de 2048x2048 pixels.")
         
         if role != "superadmin":
             new_balance = org_data['credits_balance'] - cost
@@ -1036,6 +1062,8 @@ def get_job_status(job_id: str, org_id: str = Depends(get_current_org_id)):
         
         if not job:
             raise HTTPException(status_code=404, detail="Job não encontrado.")
+            
+        job['estimated_wait'] = ESTIMATED_COST_SECONDS.get(job['job_type'], 15)
             
         return job
     finally:
@@ -1177,3 +1205,13 @@ def delete_webhook(webhook_id: str, org_id: str = Depends(get_current_org_id)):
     cur.close()
     conn.close()
     return {"message": "Webhook deletado."}
+
+@app.get("/internal/resources", tags=["Internal"])
+def get_resources():
+    return {
+        "cpu_percent": psutil.cpu_percent(interval=1),
+        "memory_percent": psutil.virtual_memory().percent,
+        "memory_used_mb": psutil.virtual_memory().used / (1024 * 1024),
+        "memory_total_mb": psutil.virtual_memory().total / (1024 * 1024)
+    }
+

@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useStudioStore } from "@/store/useStudioStore"
 import { EventBus, StudioEvent } from "@/lib/studio/events/EventBus"
+import { globalCommandManager } from "@/lib/studio/commands/GlobalCommandManager"
 
 export function StudioTopbar() {
-  const localCommandManager = useStudioStore((state) => state.localCommandManager)
+  const localCommandManager = globalCommandManager;
   const engine = useStudioStore((state) => state.engine)
   
   const [canUndo, setCanUndo] = useState(false)

@@ -5,7 +5,7 @@ import { StudioPlugin } from "@/lib/studio/plugins/BasePlugin"
 import { useStudioStore } from "@/store/useStudioStore"
 import { AIProviderManager } from "@/lib/studio/ai/AIProviderManager"
 import { AddImageCommand } from "@/lib/studio/commands/AddImageCommand"
-import { localCommandManager } from "./AssetsPlugin"
+import { globalCommandManager } from "@/lib/studio/commands/GlobalCommandManager"
 
 function RemoveBgSidebar() {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -24,7 +24,7 @@ function RemoveBgSidebar() {
       if (response.success && response.data) {
         // Sucesso: a IA devolveu a imagem sem fundo. Adiciona ao palco via Command!
         const cmd = new AddImageCommand(response.data)
-        localCommandManager.executeCommand(cmd)
+        globalCommandManager.executeCommand(cmd)
       } else {
         alert("Erro na IA: " + response.error)
       }

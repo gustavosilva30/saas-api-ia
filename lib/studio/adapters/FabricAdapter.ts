@@ -2,6 +2,11 @@ import { fabric } from "fabric";
 import { v4 as uuidv4 } from "uuid";
 import { IRenderEngine, LayerInfo } from "./IRenderEngine";
 import { EventBus, StudioEvent } from "../events/EventBus";
+import "./CurvesFilter"; // Registra o filtro customizado
+
+// Tipos auxiliares de Seleção e Ajustes
+type SelectionType = 'rect' | 'ellipse' | 'lasso' | 'crop';
+type AdjustmentType = 'brightness' | 'contrast' | 'saturation' | 'hue' | 'curves';
 
 export class FabricAdapter implements IRenderEngine {
   private canvas: fabric.Canvas | null = null;
@@ -20,6 +25,7 @@ export class FabricAdapter implements IRenderEngine {
     });
 
     this.setupEvents();
+    this.setupSnapping();
     
     // Dispara evento global avisando que o motor está pronto
     EventBus.emit(StudioEvent.CANVAS_READY, { width, height });
@@ -84,6 +90,29 @@ export class FabricAdapter implements IRenderEngine {
     this.canvas.on('selection:created', (e) => EventBus.emit(StudioEvent.OBJECT_SELECTED, e.selected));
     this.canvas.on('selection:updated', (e) => EventBus.emit(StudioEvent.OBJECT_SELECTED, e.selected));
     this.canvas.on('selection:cleared', () => EventBus.emit(StudioEvent.SELECTION_CLEARED));
+  }
+
+  private setupSnapping() {
+    if (!this.canvas) return;
+    const snapZone = 15;
+    
+    this.canvas.on('object:moving', (options) => {
+      const obj = options.target;
+      if (!obj || !this.canvas) return;
+
+      const canvasWidth = this.canvas.width || 0;
+      const canvasHeight = this.canvas.height || 0;
+      
+      const objCenter = obj.getCenterPoint();
+      
+      // Snap ao centro do canvas
+      if (Math.abs(objCenter.x - canvasWidth / 2) < snapZone) {
+        obj.set({ left: canvasWidth / 2, originX: 'center' });
+      }
+      if (Math.abs(objCenter.y - canvasHeight / 2) < snapZone) {
+        obj.set({ top: canvasHeight / 2, originY: 'center' });
+      }
+    });
   }
 
   resize(width: number, height: number): void {
@@ -271,6 +300,110 @@ export class FabricAdapter implements IRenderEngine {
     const obj = this.canvas.getObjects().find((o: any) => o.id === id);
     if (obj) {
       this.canvas.sendBackwards(obj);
+      this.canvas.requestRenderAll();
+      EventBus.emit(StudioEvent.OBJECT_MODIFIED, obj);
+    }
+  }
+
+  // --- Adjustments ---
+
+  applyAdjustment(id: string, type: AdjustmentType, params: any): void {
+    if (!this.canvas) return;
+    let obj = this.canvas.getObjects().find((o: any) => o.id === id) as fabric.Image;
+    if (!obj && id === '') {
+      obj = this.canvas.getActiveObject() as fabric.Image;
+    }
+    if (!obj || !obj.filters) return;
+
+    // Remove existing filter of this type
+    const filterTypes: Record<string, string> = {
+      'brightness': 'Brightness',
+      'contrast': 'Contrast',
+      'saturation': 'Saturation',
+      'hue': 'HueRotation',
+      'curves': 'Curves'
+    };
+
+    const targetType = filterTypes[type];
+    
+    // Filtramos os que não são do tipo atual
+    obj.filters = obj.filters.filter(f => f && (f as any).type !== targetType);
+
+    if (params !== null && params !== undefined) {
+      let newFilter = null;
+      switch (type) {
+        case 'brightness':
+          newFilter = new fabric.Image.filters.Brightness({ brightness: params });
+          break;
+        case 'contrast':
+          newFilter = new fabric.Image.filters.Contrast({ contrast: params });
+          break;
+        case 'saturation':
+          newFilter = new fabric.Image.filters.Saturation({ saturation: params });
+          break;
+        case 'hue':
+          newFilter = new fabric.Image.filters.HueRotation({ rotation: params });
+          break;
+        case 'curves':
+          newFilter = new (fabric.Image.filters as any).Curves({ lut: params });
+          break;
+      }
+      if (newFilter) {
+        obj.filters.push(newFilter);
+        // Atualizamos um map de cache nosso no objeto para facilitar leitura
+        if (!(obj as any)._adjustmentsCache) (obj as any)._adjustmentsCache = {};
+        (obj as any)._adjustmentsCache[type] = params;
+      }
+    } else {
+      if ((obj as any)._adjustmentsCache) {
+        delete (obj as any)._adjustmentsCache[type];
+      }
+    }
+
+    obj.applyFilters();
+    this.canvas.requestRenderAll();
+    EventBus.emit(StudioEvent.OBJECT_MODIFIED, obj);
+  }
+
+  getAdjustments(id: string): any {
+    if (!this.canvas) return {};
+    let obj = this.canvas.getObjects().find((o: any) => o.id === id);
+    if (!obj && id === '') {
+      obj = this.canvas.getActiveObject();
+    }
+    if (!obj) return {};
+    return (obj as any)._adjustmentsCache || {};
+  }
+
+  // --- Selection Tools ---
+
+  startSelection(type: SelectionType, options?: any): void {
+    if (!this.canvas) return;
+    // Em uma implementação real do Laço/Crop, nós setamos o isDrawingMode = true 
+    // ou lidamos com on('mouse:down') customizado desenhando polígonos.
+    // Para simplificar a v1:
+    this.canvas.defaultCursor = 'crosshair';
+    this.canvas.selection = false;
+    
+    // Guardaremos o estado em variáveis privadas da classe
+    (this as any)._selectionMode = type;
+  }
+
+  stopSelection(): void {
+    if (!this.canvas) return;
+    this.canvas.defaultCursor = 'default';
+    this.canvas.selection = true;
+    (this as any)._selectionMode = null;
+  }
+
+  setBlendMode(id: string, mode: string): void {
+    if (!this.canvas) return;
+    let obj = this.canvas.getObjects().find((o: any) => o.id === id);
+    if (!obj && id === '') {
+      obj = this.canvas.getActiveObject();
+    }
+    if (obj) {
+      obj.globalCompositeOperation = mode as any;
       this.canvas.requestRenderAll();
       EventBus.emit(StudioEvent.OBJECT_MODIFIED, obj);
     }
