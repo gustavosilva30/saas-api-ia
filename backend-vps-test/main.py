@@ -280,6 +280,16 @@ def get_current_org_id(credentials: HTTPAuthorizationCredentials = Depends(secur
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido.")
 
+def get_current_role(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    if token.startswith("sk_live_"):
+        return "api_key"
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload.get("role", "user")
+    except:
+        return "user"
+
 def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
     try:
@@ -316,6 +326,38 @@ def admin_list_organizations(admin_payload: dict = Depends(get_current_admin)):
                 org['credits'] = 0
             
         return orgs
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+class AddCreditsPayload(BaseModel):
+    amount: int
+
+@app.post("/admin/organizations/{org_id}/credits", tags=["Admin"], summary="Adicionar Créditos")
+def admin_add_credits(org_id: str, payload: AddCreditsPayload, admin_payload: dict = Depends(get_current_admin)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
+        org = cur.fetchone()
+        if not org:
+            raise HTTPException(status_code=404, detail="Empresa não encontrada.")
+            
+        new_balance = org[0] + payload.amount
+        cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        
+        cur.execute(
+            "INSERT INTO credit_transactions (organization_id, amount, reason, balance_after) VALUES (%s, %s, %s, %s);",
+            (org_id, payload.amount, "Adição manual (SuperAdmin)", new_balance)
+        )
+        
+        conn.commit()
+        return {"message": "Créditos adicionados com sucesso!", "new_balance": new_balance}
+    except HTTPException:
+        conn.rollback()
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -549,7 +591,8 @@ async def remove_background(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
     tier: str = Form("basic"), 
-    org_id: str = Depends(get_current_org_id)
+    org_id: str = Depends(get_current_org_id),
+    role: str = Depends(get_current_role)
 ):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
@@ -583,8 +626,9 @@ async def remove_background(
         if tier == "premium" and plan != "premium":
             raise HTTPException(status_code=403, detail="O Tier Premium exige plano Premium.")
             
-        if balance < cost:
-            raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
+        if role != "superadmin":
+            if balance < cost:
+                raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
             
         # 3. Processar Imagem
         alpha_matting = False
@@ -617,13 +661,14 @@ async def remove_background(
             )
         
         # 4. Debitar Saldo
-        new_balance = balance - cost
-        cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
-        
-        cur.execute(
-            "INSERT INTO credit_transactions (organization_id, amount, reason, balance_after) VALUES (%s, %s, %s, %s);",
-            (org_id, -cost, f"remove-bg ({tier})", new_balance)
-        )
+        if role != "superadmin":
+            new_balance = balance - cost
+            cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+            
+            cur.execute(
+                "INSERT INTO credit_transactions (organization_id, amount, reason, balance_after) VALUES (%s, %s, %s, %s);",
+                (org_id, -cost, f"remove-bg ({tier})", new_balance)
+            )
         
         conn.commit()
         cur.close()
@@ -876,7 +921,8 @@ async def create_campaign_analyze_job(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
-    org_id: str = Depends(get_current_org_id)
+    org_id: str = Depends(get_current_org_id),
+    role: str = Depends(get_current_role)
 ):
     if not VISION_MODEL_READY:
         raise HTTPException(status_code=503, detail="A análise visual ainda não está disponível em produção. (Feature Flag desligada)")
@@ -891,8 +937,9 @@ async def create_campaign_analyze_job(
         org_data = cur.fetchone()
         if not org_data: raise HTTPException(status_code=404, detail="Organização não encontrada.")
             
-        if org_data['credits_balance'] < cost:
-            raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente para análise visual.")
+        if role != "superadmin":
+            if org_data['credits_balance'] < cost:
+                raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente para análise visual.")
             
         input_image_bytes = await file.read()
         
@@ -900,16 +947,20 @@ async def create_campaign_analyze_job(
         if len(input_image_bytes) > 20 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="O arquivo excede o limite de 20MB.")
         
-        new_balance = org_data['credits_balance'] - cost
-        cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        if role != "superadmin":
+            new_balance = org_data['credits_balance'] - cost
+            cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        else:
+            new_balance = org_data['credits_balance']
         
         cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'campaign-analyze') RETURNING id;", (org_id, 'basic'))
         job_id = str(cur.fetchone()['id'])
         
-        cur.execute(
-            "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
-            (org_id, -cost, "job campaign-analyze", job_id, new_balance)
-        )
+        if role != "superadmin":
+            cur.execute(
+                "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
+                (org_id, -cost, "job campaign-analyze", job_id, new_balance)
+            )
         conn.commit()
         cur.close()
         
@@ -930,7 +981,8 @@ async def create_campaign_copy_job(
     request: Request,
     payload: CampaignCopyPayload,
     background_tasks: BackgroundTasks,
-    org_id: str = Depends(get_current_org_id)
+    org_id: str = Depends(get_current_org_id),
+    role: str = Depends(get_current_role)
 ):
     cost = 1
     conn = get_db_connection()
@@ -939,19 +991,23 @@ async def create_campaign_copy_job(
         cur.execute("SELECT plan, credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
         org_data = cur.fetchone()
         
-        if org_data['credits_balance'] < cost:
-            raise HTTPException(status_code=402, detail="Saldo insuficiente.")
-            
-        new_balance = org_data['credits_balance'] - cost
-        cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        if role != "superadmin":
+            if org_data['credits_balance'] < cost:
+                raise HTTPException(status_code=402, detail="Saldo insuficiente.")
+                
+            new_balance = org_data['credits_balance'] - cost
+            cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        else:
+            new_balance = org_data['credits_balance']
         
         cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'campaign-copy') RETURNING id;", (org_id, 'basic'))
         job_id = str(cur.fetchone()['id'])
         
-        cur.execute(
-            "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
-            (org_id, -cost, "job campaign-copy", job_id, new_balance)
-        )
+        if role != "superadmin":
+            cur.execute(
+                "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
+                (org_id, -cost, "job campaign-copy", job_id, new_balance)
+            )
         conn.commit()
         cur.close()
             

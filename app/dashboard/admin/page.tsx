@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Search, Building, DollarSign, Activity, MoreHorizontal, ShieldAlert, BarChart3, Receipt } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 export default function AdminPage() {
   const router = useRouter()
@@ -28,6 +30,23 @@ export default function AdminPage() {
 
   const [tenants, setTenants] = React.useState<any[]>([])
   const [payments, setPayments] = React.useState<any[]>([])
+  const [isAddCreditsOpen, setIsAddCreditsOpen] = React.useState(false)
+  const [selectedTenant, setSelectedTenant] = React.useState<any>(null)
+  const [creditsAmount, setCreditsAmount] = React.useState("500")
+
+  const handleAddCredits = async () => {
+    if (!selectedTenant || !creditsAmount) return;
+    try {
+      const { api } = await import("@/lib/api");
+      await api.addAdminCredits(selectedTenant.id, parseInt(creditsAmount, 10));
+      const data = await api.getAdminOrganizations();
+      setTenants(data);
+      setIsAddCreditsOpen(false);
+      setCreditsAmount("500");
+    } catch (err: any) {
+      alert("Erro ao adicionar créditos: " + err.message);
+    }
+  }
 
   React.useEffect(() => {
     if (isAuthorized) {
@@ -149,7 +168,16 @@ export default function AdminPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon"><MoreHorizontal className="w-4 h-4" /></Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon"><MoreHorizontal className="w-4 h-4" /></Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => { setSelectedTenant(t); setIsAddCreditsOpen(true); }}>
+                                  Adicionar Créditos
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -270,6 +298,32 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={isAddCreditsOpen} onOpenChange={setIsAddCreditsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar Créditos</DialogTitle>
+            <DialogDescription>
+              Quantos créditos deseja adicionar à empresa <strong className="text-foreground">{selectedTenant?.name}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="amount">Quantidade</Label>
+              <Input
+                id="amount"
+                type="number"
+                value={creditsAmount}
+                onChange={(e) => setCreditsAmount(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddCreditsOpen(false)}>Cancelar</Button>
+            <Button onClick={handleAddCredits}>Confirmar Adição</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

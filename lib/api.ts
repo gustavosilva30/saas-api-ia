@@ -108,6 +108,19 @@ export const api = {
     if (!response.ok) return [];
     return response.json();
   },
+  async addAdminCredits(orgId: string, amount: number) {
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+    const response = await fetch(`${API_BASE}/admin/organizations/${orgId}/credits`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount })
+    });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Falha ao adicionar créditos");
+    }
+    return response.json();
+  },
 
   async getTimeSeries() {
     await delay(400)
