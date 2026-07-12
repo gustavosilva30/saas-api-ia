@@ -22,6 +22,7 @@ import uuid
 import base64
 import json
 import requests
+import asyncio
 from rembg import remove, new_session
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -505,6 +506,12 @@ async def remove_background(
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
     
+    input_image_bytes = await file.read()
+    
+    # Limite de Upload de 20MB
+    if len(input_image_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="O arquivo excede o limite de 20MB.")
+        
     # 1. Definir custo
     costs = {"basic": 1, "pro": 3, "premium": 5}
     cost = costs.get(tier, 1)
@@ -532,8 +539,6 @@ async def remove_background(
             raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
             
         # 3. Processar Imagem
-        input_image_bytes = await file.read()
-        
         alpha_matting = False
         model_name = "u2netp"
         
@@ -547,7 +552,8 @@ async def remove_background(
         session = get_session(model_name)
         
         if alpha_matting:
-            output_image_bytes = remove(
+            output_image_bytes = await asyncio.to_thread(
+                remove,
                 input_image_bytes,
                 session=session,
                 alpha_matting=True,
@@ -556,7 +562,8 @@ async def remove_background(
                 alpha_matting_erode_size=10
             )
         else:
-            output_image_bytes = remove(
+            output_image_bytes = await asyncio.to_thread(
+                remove, 
                 input_image_bytes, 
                 session=session
             )
@@ -578,10 +585,10 @@ async def remove_background(
         return StreamingResponse(io.BytesIO(output_image_bytes), media_type="image/png")
         
     except HTTPException:
-        conn.conn.rollback()
+        conn.rollback()
         raise
     except Exception as e:
-        conn.conn.rollback()
+        conn.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao processar imagem: {str(e)}")
     finally:
         conn.close()
@@ -684,7 +691,7 @@ def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_p
         
         dispatch_webhooks(org_id, tier)
     except Exception as e:
-        conn.conn.rollback()
+        conn.rollback()
         cur = conn.cursor()
         cur.execute("UPDATE jobs SET status = 'failed', error_message = %s WHERE id = %s;", (str(e), job_id))
         conn.commit()
@@ -733,6 +740,10 @@ async def create_job(
             raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
             
         input_image_bytes = await file.read()
+        
+        # Limite de Upload de 20MB
+        if len(input_image_bytes) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="O arquivo excede o limite de 20MB.")
         
         new_balance = balance - cost
         cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
@@ -791,6 +802,10 @@ async def create_campaign_analyze_job(
             raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente para análise visual.")
             
         input_image_bytes = await file.read()
+        
+        # Limite de Upload de 20MB
+        if len(input_image_bytes) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="O arquivo excede o limite de 20MB.")
         
         new_balance = org_data['credits_balance'] - cost
         cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
