@@ -27,7 +27,7 @@ import asyncio
 import io
 import torch
 from transformers import CLIPProcessor, CLIPModel
-from PIL import Image
+from PIL import Image, ImageFilter
 from rembg import remove, new_session
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -48,18 +48,33 @@ def resize_for_inference(image_bytes: bytes, max_dim: int = 1600) -> bytes:
         return buf.getvalue()
     return image_bytes
 
-def refine_edge(rgba_bytes: bytes, erode_px: int = 1) -> bytes:
-    img = Image.open(io.BytesIO(rgba_bytes)).convert("RGBA")
-    arr = np.array(img)
-    alpha = arr[:, :, 3]
-
-    # Erosão leve só no canal alpha para remover pixels de borda contaminados pelo fundo
-    kernel = np.ones((erode_px * 2 + 1, erode_px * 2 + 1), np.uint8)
-    alpha_eroded = cv2.erode(alpha, kernel, iterations=1)
-    arr[:, :, 3] = alpha_eroded
-
+def apply_crm_loja_postprocessing(original_bytes: bytes, rembg_rgba_bytes: bytes) -> bytes:
+    input_image = Image.open(io.BytesIO(original_bytes)).convert("RGBA")
+    rembg_img = Image.open(io.BytesIO(rembg_rgba_bytes)).convert("RGBA")
+    
+    # Extrai apenas a máscara alpha gerada pela IA
+    mask = rembg_img.split()[3]
+    
+    # Limpeza de ruído e sombras residuais na máscara (Threshold do CRM Loja)
+    threshold_low = 35
+    threshold_high = 225
+    mask = mask.point(lambda p: 0 if p < threshold_low else (255 if p > threshold_high else int((p - threshold_low) * 255 / (threshold_high - threshold_low))))
+    
+    # Refinamento de bordas: Leve desfoque na máscara para suavizar o serrilhado
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=0.7))
+    
+    # Aplica nitidez APENAS no objeto (RGB original) para estourar detalhes como texto/metal
+    try:
+        obj_rgb = input_image.convert("RGB")
+        obj_rgb = obj_rgb.filter(ImageFilter.UnsharpMask(radius=0.8, percent=100, threshold=2))
+        input_image.paste(obj_rgb, (0, 0), mask)
+    except Exception:
+        pass
+        
+    input_image.putalpha(mask)
+    
     out = io.BytesIO()
-    Image.fromarray(arr).save(out, format="PNG")
+    input_image.save(out, format="PNG")
     return out.getvalue()
 
 
@@ -748,8 +763,8 @@ async def remove_background(
                 post_process_mask=False
             )
             
-            # 3.3 Decontaminate edge
-            output_image_bytes = refine_edge(output_image_bytes, erode_px=1)
+            # 3.3 Decontaminate edge (CRM Loja Pipeline)
+            output_image_bytes = apply_crm_loja_postprocessing(resized_bytes, output_image_bytes)
         
         # 4. Debitar Saldo
         if role != "superadmin":
@@ -928,8 +943,8 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
                     post_process_mask=False
                 )
                 
-                # 3.3 Decontaminate edge
-                output_image_bytes = refine_edge(output_image_bytes, erode_px=1)
+                # 3.3 Decontaminate edge (CRM Loja Pipeline)
+                output_image_bytes = apply_crm_loja_postprocessing(resized_bytes, output_image_bytes)
                 
             output_filename = f"{job_id}_out.png"
             output_path = os.path.join("storage", output_filename)
