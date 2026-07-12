@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  api-ia-fundo-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api-ia-fundo-test
+    restart: always
+    ports:
+      - "8001:8000" # Mapeia porta 8001 da VPS para a porta 8000 interna do container
+    deploy:
+      resources:
+        limits:
+          memory: 2g # Limita o uso máximo de memória RAM a 2GB
