@@ -188,11 +188,11 @@ sessions = {}
 
 def get_session(model_name: str):
     if model_name not in sessions:
-        # Configurar threads explicitly to avoid thread contention on CPU
-        sess_options = ort.SessionOptions()
-        sess_options.intra_op_num_threads = 2
-        sess_options.inter_op_num_threads = 1
-        sessions[model_name] = new_session(model_name, providers=["CPUExecutionProvider"], sess_opts=sess_options)
+        # O rembg.new_session não aceita sess_opts por kwarg.
+        # Ele lê OMP_NUM_THREADS do ambiente para configurar onnxruntime intra/inter threads.
+        import os
+        os.environ["OMP_NUM_THREADS"] = "2"
+        sessions[model_name] = new_session(model_name, providers=["CPUExecutionProvider"])
     return sessions[model_name]
 
 @app.on_event("startup")
