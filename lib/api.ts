@@ -173,8 +173,8 @@ export const api = {
       throw new Error(`Falha ao remover o fundo: ${errorText}`)
     }
 
-    const data = await response.json()
-    const resultUrl = data.imageUrl || data.image_url
+    const blob = await response.blob()
+    const resultUrl = URL.createObjectURL(blob)
     
     const durationMs = Date.now() - startTime;
     const jobId = `job_${Date.now()}`;
