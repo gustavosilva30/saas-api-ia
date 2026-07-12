@@ -82,7 +82,7 @@ export const api = {
     const formData = new FormData()
     formData.append("file", file)
 
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
 
     const headers: Record<string, string> = {}
     if (token) {
@@ -123,7 +123,7 @@ export const api = {
     return mock.apiRequests
   },
   async getApiKeys() {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
     try {
       const res = await fetch(`${API_BASE}/api-keys`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -135,7 +135,7 @@ export const api = {
     }
   },
   async createApiKey(name: string): Promise<any> {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
     const res = await fetch(`${API_BASE}/api-keys`, {
       method: "POST",
       headers: { 
@@ -147,7 +147,7 @@ export const api = {
     return res.json()
   },
   async revokeApiKey(id: string) {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
     const res = await fetch(`${API_BASE}/api-keys/${id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` }
@@ -157,7 +157,7 @@ export const api = {
   
   // Webhooks
   async getWebhooks() {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
     try {
       const res = await fetch(`${API_BASE}/webhooks`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -169,7 +169,7 @@ export const api = {
     }
   },
   async createWebhook(url: string): Promise<any> {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
     const res = await fetch(`${API_BASE}/webhooks`, {
       method: "POST",
       headers: { 
@@ -181,7 +181,7 @@ export const api = {
     return res.json()
   },
   async deleteWebhook(id: string) {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
     const res = await fetch(`${API_BASE}/webhooks/${id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` }
