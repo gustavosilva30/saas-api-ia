@@ -13,6 +13,7 @@ import hmac
 import re
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
+from pydantic import BaseModel, EmailStr, field_validator
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
