@@ -11,13 +11,17 @@ def run_tests():
     import jwt
     from datetime import datetime, timedelta
     
+    jwt_secret = os.getenv("JWT_SECRET")
+    if not jwt_secret:
+        raise RuntimeError("JWT_SECRET não configurado no ambiente de teste.")
+        
     token = jwt.encode({
         "sub": "00000000-0000-0000-0000-000000000000",
         "email": "teste@teste.com",
         "role": "owner",
         "org_id": "00000000-0000-0000-0000-000000000000",
         "exp": datetime.utcnow() + timedelta(days=1)
-    }, os.getenv("JWT_SECRET", "super-secret-jwt-key-92841"), algorithm="HS256")
+    }, jwt_secret, algorithm="HS256")
     
     headers = {"Authorization": f"Bearer {token}"}
     

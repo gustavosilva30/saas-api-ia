@@ -23,6 +23,10 @@ import base64
 import json
 import requests
 import asyncio
+import io
+import torch
+from transformers import CLIPProcessor, CLIPModel
+from PIL import Image
 from rembg import remove, new_session
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -69,12 +73,12 @@ app.add_middleware(
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 JWT_SECRET = os.getenv("JWT_SECRET")
-
+JWT_ALGORITHM = "HS256"
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET não configurado")
 
-JWT_ALGORITHM = "HS256"
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+VISION_MODEL_READY = os.getenv("VISION_MODEL_READY", "false").lower() == "true"
 RESEND_FROM_EMAIL = os.getenv("EMAIL_FROM") or os.getenv("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
 
 # Database Connection Pool
@@ -594,8 +598,49 @@ async def remove_background(
         conn.close()
 
 # --- AI Integration Helpers ---
+clip_model = None
+clip_processor = None
+
+def get_clip():
+    global clip_model, clip_processor
+    if clip_model is None:
+        clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    return clip_model, clip_processor
+
+CATEGORIES = ["tênis e calçados", "perfume e cosmético", "peça automotiva",
+              "bolsa e acessório de moda", "relógio e joia", "produto genérico"]
+BG_STYLES = ["studio_white", "dark_dramatic", "lifestyle_outdoor", "industrial"]
+
+def vision_analyze_real(input_image_bytes: bytes) -> dict:
+    model, processor = get_clip()
+    image = Image.open(io.BytesIO(input_image_bytes)).convert("RGB")
+
+    # Classificação zero-shot da categoria
+    inputs = processor(text=CATEGORIES, images=image, return_tensors="pt", padding=True)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    probs = outputs.logits_per_image.softmax(dim=1)[0]
+    best_idx = int(probs.argmax())
+    category = CATEGORIES[best_idx]
+    confidence = float(probs[best_idx])
+
+    # Classificação zero-shot do estilo de fundo recomendado
+    bg_prompts = [f"a product photo suited for a {s.replace('_', ' ')} background" for s in BG_STYLES]
+    bg_inputs = processor(text=bg_prompts, images=image, return_tensors="pt", padding=True)
+    with torch.no_grad():
+        bg_outputs = model(**bg_inputs)
+    bg_probs = bg_outputs.logits_per_image.softmax(dim=1)[0]
+    bg_style = BG_STYLES[int(bg_probs.argmax())]
+
+    return {
+        "category": category,
+        "recommendedBgStyle": bg_style,
+        "confidence": round(confidence, 4)
+    }
+
 def vision_analyze_mock(input_image_bytes):
-    # Fallback seguro para rodar local sem VLM/CLIP
+    # Fallback seguro para testes unitários antes de VISION_MODEL_READY=true
     return {
         "category": "Genérico (Análise Simulação)",
         "recommendedBgStyle": "studio_white",
@@ -679,7 +724,8 @@ def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_p
         elif job_type == 'campaign-analyze':
             with open(input_path, "rb") as f:
                 input_image_bytes = f.read()
-            data = vision_analyze_mock(input_image_bytes)
+            # Chama o modelo real de inferência que irá subir na VPS!
+            data = vision_analyze_real(input_image_bytes)
             result_data_str = json.dumps(data)
 
         elif job_type == 'campaign-copy':
@@ -788,6 +834,9 @@ async def create_campaign_analyze_job(
     file: UploadFile = File(...), 
     org_id: str = Depends(get_current_org_id)
 ):
+    if not VISION_MODEL_READY:
+        raise HTTPException(status_code=503, detail="A análise visual ainda não está disponível em produção. (Feature Flag desligada)")
+
     # Custo Fixo de Análise Visual
     cost = 2
     
@@ -989,6 +1038,8 @@ def get_webhooks(org_id: str = Depends(get_current_org_id)):
 
 @app.post("/webhooks", tags=["Webhooks"], summary="Registrar Webhook (Anti-SSRF)")
 def create_webhook(payload: CreateWebhookPayload, org_id: str = Depends(get_current_org_id)):
+    # TODO: Futuro (escalabilidade alta) - Para prevenir DNS Rebinding avançado na AWS,
+    # seria ideal resolver o IP novamente no momento do disparo do webhook, não apenas no cadastro.
     if not is_valid_webhook_url(payload.url):
         raise HTTPException(status_code=400, detail="URL inválida ou não permitida (SSRF protection).")
         
