@@ -65,7 +65,7 @@ origins_list = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins_list if origins_list else ["http://localhost:3000"],
+    allow_origins=origins_list if origins_list else ["http://localhost:3000", "https://editor.gsntech.com.br"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
