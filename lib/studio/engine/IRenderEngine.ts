@@ -38,4 +38,30 @@ export interface IRenderEngine {
    * Força uma re-renderização (utilizado em RequestAnimationFrame).
    */
   requestRender(): void;
+
+  /**
+   * Define a cor sólida de fundo.
+   */
+  setBackgroundColor(color: string): void;
+
+  /**
+   * Adiciona uma imagem ao centro do canvas a partir de uma URL.
+   * Retorna o ID gerado do objeto inserido.
+   */
+  addImageFromUrl(url: string): Promise<string>;
+
+  /**
+   * Remove um objeto pelo ID.
+   */
+  removeObject(id: string): void;
+
+  /**
+   * Retorna um objeto JSON contendo os parâmetros de sombra aplicados ao objeto selecionado.
+   */
+  getSelectedObjectShadow(): any;
+
+  /**
+   * Aplica uma sombra ao objeto selecionado.
+   */
+  applyShadowToSelected(shadow: any): void;
 }

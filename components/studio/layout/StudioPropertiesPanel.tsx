@@ -1,14 +1,23 @@
 import React from "react"
+import { PluginManager } from "@/lib/studio/plugins/PluginManager"
 
 export function StudioPropertiesPanel() {
+  const plugins = PluginManager.getAllPlugins();
+  const contextualPlugins = plugins.filter(p => p.ContextComponent);
+
   return (
-    <div className="w-64 border-l bg-background flex flex-col shrink-0 z-10 p-4">
-      <h3 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-wider">
-        Propriedades
-      </h3>
-      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground text-center">
-        Selecione um objeto no canvas para editar suas propriedades.
-      </div>
+    <div className="w-64 border-l bg-background flex flex-col shrink-0 z-10">
+      {contextualPlugins.length > 0 ? (
+        contextualPlugins.map(p => (
+          <div key={p.id}>
+            {p.ContextComponent && <p.ContextComponent />}
+          </div>
+        ))
+      ) : (
+        <div className="flex-1 flex flex-col p-4 text-center justify-center text-sm text-muted-foreground">
+          Selecione um objeto para editar propriedades.
+        </div>
+      )}
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { fabric } from "fabric";
+import { v4 as uuidv4 } from "uuid";
 import { IRenderEngine } from "./IRenderEngine";
 import { EventBus, StudioEvent } from "../events/EventBus";
 
@@ -134,6 +135,82 @@ export class FabricAdapter implements IRenderEngine {
   requestRender(): void {
     if (this.canvas) {
       this.canvas.requestRenderAll();
+    }
+  }
+
+  setBackgroundColor(color: string): void {
+    if (this.canvas) {
+      this.canvas.backgroundColor = color;
+      this.canvas.requestRenderAll();
+    }
+  }
+
+  addImageFromUrl(url: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (!this.canvas) return reject("Canvas not initialized");
+
+      fabric.Image.fromURL(url, (img) => {
+        if (!img) return reject("Failed to load image");
+        
+        const id = uuidv4();
+        // Extendendo as propriedades customizadas
+        img.set({
+          id, // id string
+          left: this.canvas!.width! / 2,
+          top: this.canvas!.height! / 2,
+          originX: 'center',
+          originY: 'center',
+          cornerColor: '#3b82f6',
+          cornerStyle: 'circle',
+          borderColor: '#3b82f6',
+          transparentCorners: false
+        } as any);
+
+        // Escala básica para caber na tela caso a imagem seja gigante
+        const scaleX = (this.canvas!.width! * 0.8) / img.width!;
+        const scaleY = (this.canvas!.height! * 0.8) / img.height!;
+        const scale = Math.min(scaleX, scaleY, 1);
+        img.scale(scale);
+
+        this.canvas!.add(img);
+        this.canvas!.setActiveObject(img);
+        this.canvas!.requestRenderAll();
+        
+        resolve(id);
+      }, { crossOrigin: 'anonymous' });
+    });
+  }
+
+  removeObject(id: string): void {
+    if (!this.canvas) return;
+    const objects = this.canvas.getObjects() as any[];
+    const target = objects.find(o => o.id === id);
+    if (target) {
+      this.canvas.remove(target);
+      this.canvas.requestRenderAll();
+    }
+  }
+
+  getSelectedObjectShadow(): any {
+    if (!this.canvas) return null;
+    const activeObject = this.canvas.getActiveObject();
+    if (activeObject && activeObject.shadow) {
+      return activeObject.shadow;
+    }
+    return null;
+  }
+
+  applyShadowToSelected(shadowOptions: any): void {
+    if (!this.canvas) return;
+    const activeObject = this.canvas.getActiveObject();
+    if (activeObject) {
+      if (!shadowOptions) {
+        activeObject.set('shadow', null);
+      } else {
+        activeObject.set('shadow', new fabric.Shadow(shadowOptions));
+      }
+      this.canvas.requestRenderAll();
+      EventBus.emit(StudioEvent.OBJECT_MODIFIED, activeObject);
     }
   }
 }
