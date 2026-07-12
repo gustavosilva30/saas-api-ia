@@ -7,14 +7,19 @@ interface StudioState {
   isReady: boolean
   zoom: number
   pan: { x: number, y: number }
-  activePlugin: string | null
   
   // Actions
   setEngine: (engine: IRenderEngine) => void
   setReady: (ready: boolean) => void
   setZoom: (zoom: number) => void
   setPan: (x: number, y: number) => void
-  setActivePlugin: (pluginId: string | null) => void
+  // Estado de UI
+  activePlugin: string | null;
+  setActivePlugin: (pluginId: string | null) => void;
+  
+  // Estado de IA
+  isProcessingAI: boolean;
+  setProcessingAI: (isProcessing: boolean) => void;
 }
 
 export const useStudioStore = create<StudioState>((set) => {
@@ -42,6 +47,9 @@ export const useStudioStore = create<StudioState>((set) => {
     setReady: (ready) => set({ isReady: ready }),
     setZoom: (zoom) => set({ zoom }),
     setPan: (x, y) => set({ pan: { x, y } }),
-    setActivePlugin: (pluginId) => set({ activePlugin: pluginId })
+    setActivePlugin: (pluginId) => set({ activePlugin: pluginId }),
+
+    isProcessingAI: false,
+    setProcessingAI: (isProcessing) => set({ isProcessingAI: isProcessing }),
   }
 })
