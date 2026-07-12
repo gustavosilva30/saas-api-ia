@@ -1003,6 +1003,19 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
             async with ai_semaphore:
                 data = await asyncio.to_thread(ollama_generate_copy, category_arg or "Genérico")
             result_data_str = json.dumps(data)
+            
+        elif job_type == 'motion-export':
+            async with ai_semaphore:
+                from engine.motion_engine import MotionRenderer
+                with open(input_path, "r", encoding="utf-8") as f:
+                    timeline = json.loads(f.read())
+                renderer = MotionRenderer(fps=30)
+                output_filename = f"{job_id}_motion_out.{extra_arg}"
+                output_path_full = os.path.join("storage", output_filename)
+                
+                await asyncio.to_thread(renderer.render_timeline, timeline, output_path_full, extra_arg)
+            
+            result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
         
         cur.execute("UPDATE jobs SET status = 'completed', result_url = %s, result_data = %s WHERE id = %s;", (result_url, result_data_str, job_id))
         conn.commit()
@@ -1626,6 +1639,76 @@ def purchase_marketplace_item(item_id: str, org_id: str = Depends(get_current_or
     except HTTPException:
         conn.rollback()
         raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+from engine.motion_engine import MotionRenderer
+
+class MotionExportPayload(BaseModel):
+    timeline_data: str # JSON string of timeline
+    output_format: str = "mp4"
+
+@app.post("/motion/export", status_code=202, tags=["Animação (Fase 5)"], summary="Renderizar Vídeo da Timeline")
+@limiter.limit("5/minute")
+async def create_motion_export_job(
+    request: Request,
+    payload: MotionExportPayload,
+    background_tasks: BackgroundTasks,
+    org_id: str = Depends(get_current_org_id),
+    role: str = Depends(get_current_role)
+):
+    try:
+        timeline = json.loads(payload.timeline_data)
+    except:
+        raise HTTPException(status_code=400, detail="timeline_data deve ser um JSON válido.")
+        
+    duration = min(timeline.get("duration", 5.0), 15.0)
+    width = timeline.get("width", 1080)
+    height = timeline.get("height", 1080)
+    
+    if width > 1080 or height > 1080:
+        raise HTTPException(status_code=400, detail="Resolução máxima permitida é 1080x1080.")
+        
+    cost = max(1, int(duration * 2)) # 2 credits per second roughly
+    
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT plan, credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
+        org_data = cur.fetchone()
+        
+        balance = org_data['credits_balance']
+        if role != "superadmin" and balance < cost:
+            raise HTTPException(status_code=402, detail=f"Saldo insuficiente. Necessário {cost} créditos.")
+            
+        if role != "superadmin":
+            new_balance = balance - cost
+            cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        else:
+            new_balance = balance
+            
+        cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'motion-export') RETURNING id;", (org_id, 'basic'))
+        job_id = str(cur.fetchone()['id'])
+        
+        if role != "superadmin":
+            cur.execute(
+                "INSERT INTO credit_transactions (organization_id, amount, reason, balance_after) VALUES (%s, %s, %s, %s);",
+                (org_id, -cost, f"motion export ({payload.output_format})", new_balance)
+            )
+            
+        conn.commit()
+        
+        # Save timeline payload to temp file
+        input_path = os.path.join("storage", f"{job_id}_timeline.json")
+        with open(input_path, "w", encoding="utf-8") as f:
+            f.write(payload.timeline_data)
+            
+        background_tasks.add_task(process_job_task, job_id, org_id, 'basic', 'motion-export', input_path, extra_arg=payload.output_format)
+        
+        return {"job_id": job_id, "status": "pending", "message": f"Renderização estimada em {int(duration * 1.5)}s iniciada."}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
