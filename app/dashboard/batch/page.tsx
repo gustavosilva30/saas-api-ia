@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Upload, ImageIcon, Download, RefreshCw, Trash2, CheckCircle2, AlertCircle } from "lucide-react"
+import { Upload, ImageIcon, Download, RefreshCw, Trash2, CheckCircle2, AlertCircle, Eye, SlidersHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -25,6 +26,11 @@ export default function BatchPage() {
   const [loading, setLoading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [bgColor, setBgColor] = useState<BgColor>("transparent")
+  
+  // Estados para o Modal de Comparação
+  const [selectedItem, setSelectedItem] = useState<BatchItem | null>(null)
+  const [sliderPosition, setSliderPosition] = useState(50)
+  const [previewBgColor, setPreviewBgColor] = useState<BgColor>("transparent")
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -79,9 +85,7 @@ export default function BatchPage() {
     setLoading(true)
     const toastId = toast.loading(`Processando lote de ${pendingItems.length} imagens...`)
 
-    // Processa sequencialmente para não sobrecarregar a VPS
     for (const item of pendingItems) {
-      // Atualiza status do item para processando
       setItems((prev) =>
         prev.map((i) => (i.id === item.id ? { ...i, status: "processing" } : i))
       )
@@ -89,7 +93,6 @@ export default function BatchPage() {
       try {
         const result = await api.removeBackground(item.file)
         
-        // Atualiza item como concluído com a URL do resultado
         setItems((prev) =>
           prev.map((i) =>
             i.id === item.id ? { ...i, status: "done", resultUrl: result.resultUrl } : i
@@ -97,7 +100,6 @@ export default function BatchPage() {
         )
       } catch (err: any) {
         console.error(err)
-        // Atualiza item como falhado
         setItems((prev) =>
           prev.map((i) =>
             i.id === item.id
@@ -112,11 +114,10 @@ export default function BatchPage() {
     setLoading(false)
   }
 
-  // Função para baixar uma imagem individual com a cor de fundo aplicada
-  const downloadSingle = (item: BatchItem) => {
+  const downloadSingle = (item: BatchItem, selectedBg: BgColor = bgColor) => {
     if (!item.resultUrl) return
 
-    if (bgColor === "transparent") {
+    if (selectedBg === "transparent") {
       const link = document.createElement("a")
       link.href = item.resultUrl
       link.download = `sem-fundo-${item.file.name.split(".")[0]}.png`
@@ -135,16 +136,16 @@ export default function BatchPage() {
       const ctx = canvas.getContext("2d")
 
       if (ctx) {
-        if (bgColor === "white") ctx.fillStyle = "#ffffff"
-        else if (bgColor === "black") ctx.fillStyle = "#000000"
-        else if (bgColor === "gray") ctx.fillStyle = "#808080"
+        if (selectedBg === "white") ctx.fillStyle = "#ffffff"
+        else if (selectedBg === "black") ctx.fillStyle = "#000000"
+        else if (selectedBg === "gray") ctx.fillStyle = "#808080"
         
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0)
 
         const link = document.createElement("a")
         link.href = canvas.toDataURL("image/png")
-        link.download = `fundo-${bgColor}-${item.file.name.split(".")[0]}.png`
+        link.download = `fundo-${selectedBg}-${item.file.name.split(".")[0]}.png`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -153,11 +154,9 @@ export default function BatchPage() {
     img.src = item.resultUrl
   }
 
-  // Baixar todos os arquivos concluídos
   const downloadAll = () => {
     const completed = items.filter((item) => item.status === "done")
     completed.forEach((item, index) => {
-      // Pequeno atraso entre downloads para o navegador não bloquear múltiplas janelas
       setTimeout(() => {
         downloadSingle(item)
       }, index * 300)
@@ -246,7 +245,17 @@ export default function BatchPage() {
                 {items.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center gap-3 border rounded-lg p-2 bg-card hover:bg-muted/30 transition-all"
+                    className={cn(
+                      "flex items-center gap-3 border rounded-lg p-2 bg-card transition-all",
+                      item.status === "done" ? "cursor-pointer hover:border-primary/50 hover:bg-muted/10" : "bg-card"
+                    )}
+                    onClick={() => {
+                      if (item.status === "done") {
+                        setSelectedItem(item)
+                        setPreviewBgColor(bgColor)
+                        setSliderPosition(50)
+                      }
+                    }}
                   >
                     {/* Thumbnail */}
                     <div className="relative size-12 rounded border overflow-hidden bg-checkerboard flex items-center justify-center shrink-0">
@@ -260,6 +269,11 @@ export default function BatchPage() {
                           item.resultUrl && item.status === "done" && bgColor === "gray" && "bg-gray-500"
                         )}
                       />
+                      {item.status === "done" && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                          <Eye className="w-5 h-5 text-white" />
+                        </div>
+                      )}
                     </div>
 
                     {/* Detalhes do Arquivo */}
@@ -271,7 +285,7 @@ export default function BatchPage() {
                     </div>
 
                     {/* Status/Ações */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {item.status === "processing" && (
                         <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
                           <RefreshCw className="size-3.5 animate-spin" />
@@ -351,6 +365,133 @@ export default function BatchPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal de Comparação Slider Antes/Depois */}
+      <Dialog open={selectedItem !== null} onOpenChange={(open) => !open && setSelectedItem(null)}>
+        {selectedItem && (
+          <DialogContent className="max-w-3xl w-[90vw] max-h-[90vh] overflow-y-auto flex flex-col gap-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                <SlidersHorizontal className="w-5 h-5 text-primary" />
+                Comparador Antes & Depois
+              </DialogTitle>
+              <DialogDescription className="truncate">
+                Visualizando comparativo para {selectedItem.file.name}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-6 md:grid-cols-3">
+              {/* Painel Esquerdo: Comparador Slider */}
+              <div className="md:col-span-2 flex flex-col items-center justify-center">
+                <div className="relative w-full aspect-square md:aspect-auto md:h-[450px] overflow-hidden rounded-xl border bg-checkerboard flex items-center justify-center select-none shadow-inner">
+                  {/* Imagem de Fundo (Sem Fundo + Cor selecionada) */}
+                  <div
+                    className={cn(
+                      "absolute inset-0 flex items-center justify-center p-4 transition-colors duration-300",
+                      previewBgColor === "white" && "bg-white",
+                      previewBgColor === "black" && "bg-black",
+                      previewBgColor === "gray" && "bg-gray-500",
+                      previewBgColor === "transparent" && "bg-checkerboard"
+                    )}
+                  >
+                    {selectedItem.resultUrl && (
+                      <img
+                        src={selectedItem.resultUrl}
+                        alt="Sem Fundo"
+                        className="max-h-full max-w-full object-contain pointer-events-none drop-shadow-md"
+                      />
+                    )}
+                  </div>
+
+                  {/* Imagem Original (Sobreposta e cortada) */}
+                  <div
+                    className="absolute inset-0 flex items-center justify-center p-4 bg-background pointer-events-none"
+                    style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+                  >
+                    <img
+                      src={selectedItem.originalUrl}
+                      alt="Original"
+                      className="max-h-full max-w-full object-contain pointer-events-none"
+                    />
+                  </div>
+
+                  {/* Linha Divisória */}
+                  <div
+                    className="absolute inset-y-0 w-0.5 bg-white shadow-xl pointer-events-none z-20"
+                    style={{ left: `${sliderPosition}%` }}
+                  >
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-9 rounded-full bg-white text-black border border-border shadow-xl flex items-center justify-center text-sm font-bold">
+                      ↔
+                    </div>
+                  </div>
+
+                  {/* Controle deslizante oculto sobreposto */}
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={sliderPosition}
+                    onChange={(e) => setSliderPosition(Number(e.target.value))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-30"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+                  Arraste para os lados para comparar o recorte da imagem
+                </p>
+              </div>
+
+              {/* Painel Direito: Configurações e Download */}
+              <div className="flex flex-col justify-between border-t md:border-t-0 md:border-l pt-6 md:pt-0 md:pl-6 gap-6">
+                <div className="space-y-6">
+                  {/* Seletor de Fundo no Modal */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold">Visualizar com Fundo:</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["transparent", "white", "black", "gray"] as BgColor[]).map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => setPreviewBgColor(color)}
+                          className={cn(
+                            "px-3 py-2 rounded-lg border text-xs font-semibold shadow-xs transition-all capitalize text-center",
+                            color === "transparent" && "bg-checkerboard border-border",
+                            color === "white" && "bg-white text-black border-border",
+                            color === "black" && "bg-black text-white border-zinc-800",
+                            color === "gray" && "bg-gray-500 text-white border-zinc-600",
+                            previewBgColor === color ? "ring-2 ring-primary border-primary scale-102" : "opacity-80 hover:opacity-100"
+                          )}
+                        >
+                          {color === "transparent" ? "Transparente" : color}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Detalhes do Arquivo */}
+                  <div className="space-y-2 border-t pt-4">
+                    <h4 className="text-sm font-semibold">Informações da Imagem:</h4>
+                    <div className="space-y-1.5 text-xs text-muted-foreground">
+                      <p><strong>Nome:</strong> <span className="text-foreground">{selectedItem.file.name}</span></p>
+                      <p><strong>Tamanho:</strong> <span className="text-foreground">{(selectedItem.file.size / 1024).toFixed(1)} KB</span></p>
+                      <p><strong>Formato de Saída:</strong> <span className="text-foreground">PNG Transparente</span></p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ações de Download */}
+                <div className="space-y-2 border-t pt-4 mt-auto">
+                  <Button className="w-full" onClick={() => downloadSingle(selectedItem, previewBgColor)}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Baixar com Fundo {previewBgColor === "transparent" ? "Transparente" : previewBgColor}
+                  </Button>
+                  <Button variant="outline" className="w-full" onClick={() => setSelectedItem(null)}>
+                    Fechar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
     </>
   )
 }
