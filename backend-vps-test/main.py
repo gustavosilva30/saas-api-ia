@@ -92,6 +92,8 @@ class DBConnectionWrapper:
         return self.conn.cursor(*args, **kwargs)
     def commit(self):
         self.conn.commit()
+    def rollback(self):
+        self.conn.rollback()
     def close(self):
         global db_pool
         if db_pool:
