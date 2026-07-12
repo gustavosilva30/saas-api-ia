@@ -48,9 +48,35 @@ export const api = {
     await delay(400)
     return mock.recentImages
   },
-  async removeBackground(_file: File): Promise<ProcessedImage> {
-    await delay(1800)
-    return mock.recentImages[1]
+  async removeBackground(file: File): Promise<ProcessedImage> {
+    const formData = new FormData()
+    formData.append("file", file)
+
+    const response = await fetch(`${API_BASE}/remove-bg`, {
+      method: "POST",
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "Erro desconhecido")
+      throw new Error(`Falha ao remover o fundo: ${errorText}`)
+    }
+
+    const blob = await response.blob()
+    const resultUrl = URL.createObjectURL(blob)
+
+    return {
+      id: `img_${Date.now()}`,
+      name: file.name,
+      originalUrl: URL.createObjectURL(file),
+      resultUrl: resultUrl,
+      status: "done",
+      format: "PNG",
+      resolution: "Auto",
+      sizeKb: Math.round(blob.size / 1024),
+      durationMs: 1500,
+      createdAt: new Date().toISOString(),
+    }
   },
 
   // API
