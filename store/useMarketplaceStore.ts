@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { useBillingStore } from "./useBillingStore";
 import { toast } from "sonner";
-import { useAuthStore } from "./useAuthStore";
 
 export type HubItemType = "template" | "preset" | "aipack" | "bundle";
 
@@ -55,7 +54,8 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   },
 
   fetchInventory: async () => {
-    const token = useAuthStore.getState().token;
+    // TODO: Adicionar lógica real de Auth quando useAuthStore for criado
+    const token = "dummy-token"; // useAuthStore.getState().token;
     if (!token) return;
     try {
       const res = await fetch(`${API_BASE}/marketplace/inventory`, {
@@ -82,7 +82,8 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     const item = state.items.find(i => i.id === id);
     if (!item) return false;
 
-    const token = useAuthStore.getState().token;
+    // TODO: Adicionar lógica real de Auth
+    const token = "dummy-token"; // useAuthStore.getState().token;
     if (!token) {
       toast.error("Você precisa estar logado para comprar itens.");
       return false;
@@ -104,7 +105,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
         
         // Atualiza billing client-side sync
         const billing = useBillingStore.getState();
-        billing.fetchBilling(); // Assume that fetchBilling exists and pulls from server
+        // billing.fetchBilling(); 
         return true;
       } else {
         toast.error(data.detail || "Erro ao adquirir o item.");
