@@ -80,18 +80,10 @@ export const api = {
   },
   async removeBackground(file: File): Promise<ProcessedImage> {
     const formData = new FormData()
-    formData.append("file", file)
+    formData.append("image", file)
 
-    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
-
-    const headers: Record<string, string> = {}
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`
-    }
-
-    const response = await fetch(`${API_BASE}/remove-bg`, {
+    const response = await fetch('/api/studio/remove-bg', {
       method: "POST",
-      headers,
       body: formData,
     })
 
@@ -100,8 +92,8 @@ export const api = {
       throw new Error(`Falha ao remover o fundo: ${errorText}`)
     }
 
-    const blob = await response.blob()
-    const resultUrl = URL.createObjectURL(blob)
+    const data = await response.json()
+    const resultUrl = data.imageUrl || data.image_url
 
     return {
       id: `img_${Date.now()}`,
@@ -111,8 +103,8 @@ export const api = {
       status: "done",
       format: "PNG",
       resolution: "Auto",
-      sizeKb: Math.round(blob.size / 1024),
-      durationMs: 1500,
+      sizeKb: 150,
+      durationMs: 2000,
       createdAt: new Date().toISOString(),
     }
   },
