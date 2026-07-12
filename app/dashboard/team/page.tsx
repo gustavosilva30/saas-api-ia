@@ -2,26 +2,29 @@
 
 import { useState } from "react"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { UserPlus, MoreHorizontal, Mail, ShieldAlert } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { UserPlus } from "lucide-react"
+
+// Types that might be useful later when hooking up to an API
+type TeamMember = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  avatar: string;
+};
 
 export default function TeamPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   
-  const teamMembers = [
-    { id: 1, name: "Gustavo Silva", email: "gustavo@example.com", role: "Owner", status: "Active", avatar: "https://github.com/shadcn.png" },
-    { id: 2, name: "Ana Beatriz", email: "ana@example.com", role: "Admin", status: "Active", avatar: "" },
-    { id: 3, name: "Carlos Dev", email: "carlos@example.com", role: "Developer", status: "Active", avatar: "" },
-    { id: 4, name: "Julia Designer", email: "julia@example.com", role: "Viewer", status: "Pending", avatar: "" },
-  ];
+  // Estado vazio de membros (na vida real viria do banco de dados)
+  const teamMembers: TeamMember[] = [];
 
   return (
     <div className="space-y-6">
@@ -72,66 +75,26 @@ export default function TeamPage() {
       </div>
       
       <Card>
-        <div className="divide-y divide-border">
-          {teamMembers.map((member) => (
-            <div key={member.id} className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <Avatar>
-                  <AvatarImage src={member.avatar} />
-                  <AvatarFallback>{member.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-sm">{member.name}</p>
-                    {member.status === "Pending" && (
-                      <Badge variant="outline" className="text-xs py-0 h-5 bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
-                        Pendente
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{member.email}</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-4">
-                <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
-                  {member.role === 'Owner' && <ShieldAlert className="w-4 h-4 text-primary" />}
-                  {member.role}
-                </div>
-                
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {member.status === "Pending" && (
-                      <DropdownMenuItem>
-                        <Mail className="w-4 h-4 mr-2" /> Reenviar Convite
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem>Editar Cargo</DropdownMenuItem>
-                    {member.role !== "Owner" && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-                          Remover da Equipe
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          ))}
-        </div>
+        {teamMembers.length > 0 ? (
+          <div className="divide-y divide-border">
+            {/* O conteúdo da tabela mapeando teamMembers ficaria aqui */}
+          </div>
+        ) : (
+          <div className="p-12 text-center flex flex-col items-center justify-center">
+            <UserPlus className="w-12 h-12 text-muted-foreground/50 mb-4" />
+            <h3 className="text-lg font-medium">Nenhum membro na equipe</h3>
+            <p className="text-muted-foreground max-w-sm mt-2 mb-6">
+              Você ainda não adicionou ninguém. Convide seu primeiro membro para colaborar no projeto.
+            </p>
+            <Button onClick={() => setIsInviteOpen(true)} variant="outline">
+              Convidar o primeiro membro
+            </Button>
+          </div>
+        )}
       </Card>
       
       <div className="text-xs text-muted-foreground text-center pt-4">
-        Você atingiu 4 de 10 membros permitidos no seu plano atual.
+        Você atingiu 0 de 10 membros permitidos no seu plano atual.
       </div>
     </div>
   )

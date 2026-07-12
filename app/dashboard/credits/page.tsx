@@ -8,10 +8,9 @@ import { Badge } from "@/components/ui/badge"
 import { Coins, History, Zap } from "lucide-react"
 
 export default function CreditsPage() {
-  // Dados simulados
-  const totalCredits = 5000;
-  const usedCredits = 3450;
-  const percentage = (usedCredits / totalCredits) * 100;
+  const totalCredits = 0;
+  const usedCredits = 0;
+  const percentage = totalCredits > 0 ? (usedCredits / totalCredits) * 100 : 0;
   
   return (
     <div className="space-y-6">
@@ -43,15 +42,15 @@ export default function CreditsPage() {
               </div>
               <Progress value={percentage} className="h-2" />
               <p className="text-xs text-muted-foreground mt-2">
-                Os créditos expiram em 30 de Novembro de 2026.
+                Nenhum pacote ativo no momento.
               </p>
             </div>
           </CardContent>
           <CardFooter className="flex gap-4">
             <Button className="w-full sm:w-auto" variant="default">
-              <Zap className="w-4 h-4 mr-2" /> Comprar Mais Créditos
+              <Zap className="w-4 h-4 mr-2" /> Comprar Créditos
             </Button>
-            <Button className="w-full sm:w-auto" variant="outline">
+            <Button className="w-full sm:w-auto" variant="outline" disabled>
               Ativar Recarga Automática
             </Button>
           </CardFooter>
@@ -82,23 +81,8 @@ export default function CreditsPage() {
       </h3>
       
       <Card>
-        <div className="divide-y divide-border">
-          {[
-            { date: 'Hoje, 14:32', action: 'API /remove-bg (Premium)', credits: '-25', status: 'Processado' },
-            { date: 'Ontem, 09:15', action: 'Processamento em Lote', credits: '-120', status: 'Processado' },
-            { date: '10 de Julho', action: 'Recarga via Cartão final 4242', credits: '+5000', status: 'Pago', isPositive: true },
-            { date: '08 de Julho', action: 'API /remove-bg (Basic)', credits: '-5', status: 'Processado' },
-          ].map((item, i) => (
-            <div key={i} className="flex justify-between items-center p-4">
-              <div>
-                <p className="font-medium text-sm">{item.action}</p>
-                <p className="text-xs text-muted-foreground">{item.date} • {item.status}</p>
-              </div>
-              <div className={`font-semibold ${item.isPositive ? 'text-green-500' : 'text-foreground'}`}>
-                {item.credits}
-              </div>
-            </div>
-          ))}
+        <div className="p-8 text-center text-muted-foreground">
+          <p>Nenhuma transação recente encontrada.</p>
         </div>
       </Card>
     </div>

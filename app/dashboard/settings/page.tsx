@@ -26,12 +26,12 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="org-name">Nome da Organização</Label>
-              <Input id="org-name" defaultValue="Tech Solutions LTDA" />
+              <Input id="org-name" placeholder="Digite o nome da empresa" defaultValue="" />
             </div>
             
             <div className="space-y-2">
               <Label htmlFor="org-email">E-mail de Contato (Para avisos de billing)</Label>
-              <Input id="org-email" type="email" defaultValue="financeiro@techsolutions.com" />
+              <Input id="org-email" type="email" placeholder="financeiro@suaempresa.com" defaultValue="" />
             </div>
           </CardContent>
           <CardFooter className="border-t border-border/50 pt-6">
@@ -50,7 +50,7 @@ export default function SettingsPage() {
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="default-tier">Plano de Qualidade Padrão (Tier)</Label>
-              <Select defaultValue="pro">
+              <Select defaultValue="basic">
                 <SelectTrigger id="default-tier">
                   <SelectValue placeholder="Selecione um tier" />
                 </SelectTrigger>
@@ -72,7 +72,7 @@ export default function SettingsPage() {
                   Receba um e-mail quando seu saldo de créditos estiver acabando.
                 </p>
               </div>
-              <Switch defaultChecked />
+              <Switch defaultChecked={false} />
             </div>
             
              <div className="flex items-center justify-between border p-4 rounded-lg">
@@ -82,7 +82,7 @@ export default function SettingsPage() {
                   Permite que a IA salve a imagem temporariamente caso ocorra um erro 500 para debug.
                 </p>
               </div>
-              <Switch />
+              <Switch defaultChecked={false} />
             </div>
           </CardContent>
           <CardFooter className="border-t border-border/50 pt-6">

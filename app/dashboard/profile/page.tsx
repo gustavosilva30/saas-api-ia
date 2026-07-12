@@ -25,11 +25,11 @@ export default function ProfilePage() {
           <CardContent className="space-y-6">
             <div className="flex items-center gap-6">
               <Avatar className="w-24 h-24">
-                <AvatarImage src="https://github.com/shadcn.png" />
-                <AvatarFallback>GS</AvatarFallback>
+                <AvatarImage src="" />
+                <AvatarFallback>?</AvatarFallback>
               </Avatar>
               <div className="space-y-2">
-                <Button variant="outline" size="sm">Trocar Foto</Button>
+                <Button variant="outline" size="sm">Adicionar Foto</Button>
                 <p className="text-xs text-muted-foreground">JPG, GIF ou PNG. Tamanho máximo de 2MB.</p>
               </div>
             </div>
@@ -37,17 +37,17 @@ export default function ProfilePage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="first-name">Nome</Label>
-                <Input id="first-name" defaultValue="Gustavo" />
+                <Input id="first-name" placeholder="Seu nome" defaultValue="" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="last-name">Sobrenome</Label>
-                <Input id="last-name" defaultValue="Silva" />
+                <Input id="last-name" placeholder="Seu sobrenome" defaultValue="" />
               </div>
             </div>
             
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
-              <Input id="email" type="email" defaultValue="gustavo@example.com" disabled />
+              <Input id="email" type="email" placeholder="seu@email.com" defaultValue="" disabled />
               <p className="text-xs text-muted-foreground">O e-mail não pode ser alterado por aqui. Entre em contato com o suporte.</p>
             </div>
           </CardContent>
