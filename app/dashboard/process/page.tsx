@@ -21,45 +21,56 @@ export default function ProcessPage() {
   const [bgColor, setBgColor] = useState<BgColor>("transparent")
   
   const containerRef = useRef<HTMLDivElement>(null)
-  const isPointerDown = useRef(false)
+  const [isDraggingSlider, setIsDraggingSlider] = useState(false)
 
-  // Manipulação de clique e arrasto no Slider (Mais confiável que input range)
-  const handlePointerMove = (clientX: number) => {
+  // Manipulador global de movimento do Slider para precisão máxima
+  useEffect(() => {
+    const handleGlobalMove = (clientX: number) => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const x = clientX - rect.left
+      const position = Math.max(0, Math.min(100, (x / rect.width) * 100))
+      setSliderPosition(position)
+    }
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDraggingSlider) return
+      handleGlobalMove(e.clientX)
+    }
+
+    const onMouseUp = () => {
+      setIsDraggingSlider(false)
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDraggingSlider) return
+      if (e.touches.length > 0) {
+        handleGlobalMove(e.touches[0].clientX)
+      }
+    }
+
+    if (isDraggingSlider) {
+      window.addEventListener("mousemove", onMouseMove)
+      window.addEventListener("mouseup", onMouseUp)
+      window.addEventListener("touchmove", onTouchMove, { passive: false })
+      window.addEventListener("touchend", onMouseUp)
+    }
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove)
+      window.removeEventListener("mouseup", onMouseUp)
+      window.removeEventListener("touchmove", onTouchMove)
+      window.removeEventListener("touchend", onMouseUp)
+    }
+  }, [isDraggingSlider])
+
+  const startDrag = (clientX: number) => {
+    setIsDraggingSlider(true)
     if (!containerRef.current) return
     const rect = containerRef.current.getBoundingClientRect()
     const x = clientX - rect.left
     const position = Math.max(0, Math.min(100, (x / rect.width) * 100))
     setSliderPosition(position)
-  }
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    isPointerDown.current = true
-    handlePointerMove(e.clientX)
-  }
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isPointerDown.current) return
-    handlePointerMove(e.clientX)
-  }
-
-  const handleMouseUpOrLeave = () => {
-    isPointerDown.current = false
-  }
-
-  // Suporte a Touch screen (celulares)
-  const handleTouchStart = (e: React.TouchEvent) => {
-    isPointerDown.current = true
-    handlePointerMove(e.touches[0].clientX)
-  }
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isPointerDown.current) return
-    handlePointerMove(e.touches[0].clientX)
-  }
-
-  // Prevenir arrasto de imagem padrão do navegador
-  const handleImageDragStart = (e: React.DragEvent) => {
-    e.preventDefault()
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -212,47 +223,47 @@ export default function ProcessPage() {
                 {/* Visualizador de Imagem */}
                 <div
                   ref={containerRef}
-                  onMouseDown={handleMouseDown}
-                  onMouseMove={handleMouseMove}
-                  onMouseUp={handleMouseUpOrLeave}
-                  onMouseLeave={handleMouseUpOrLeave}
-                  onTouchStart={handleTouchStart}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleMouseUpOrLeave}
-                  className={cn(
-                    "relative w-full aspect-video md:aspect-[16/9] rounded-lg border overflow-hidden flex items-center justify-center select-none cursor-ew-resize",
-                    bgColor === "transparent" && "bg-checkerboard",
-                    bgColor === "white" && "bg-white",
-                    bgColor === "black" && "bg-black",
-                    bgColor === "gray" && "bg-gray-500"
-                  )}
+                  onMouseDown={(e) => startDrag(e.clientX)}
+                  onTouchStart={(e) => startDrag(e.touches[0].clientX)}
+                  className="relative w-full aspect-video md:aspect-[16/9] rounded-lg border overflow-hidden flex items-center justify-center select-none cursor-ew-resize touch-none bg-muted/20"
                 >
                   {!resultUrl ? (
                     <img
                       src={originalUrl || ""}
                       alt="Original"
-                      onDragStart={handleImageDragStart}
+                      onDragStart={(e) => e.preventDefault()}
                       className="max-h-full object-contain pointer-events-none"
                     />
                   ) : (
                     <div className="relative w-full h-full flex items-center justify-center pointer-events-none">
-                      {/* Antes (Original) */}
-                      <img
-                        src={originalUrl || ""}
-                        alt="Original"
-                        onDragStart={handleImageDragStart}
-                        className="absolute max-h-full object-contain"
-                      />
-                      
-                      {/* Depois (Sem fundo / Cor de fundo aplicada) */}
-                      <div
+                      {/* Antes (Original) - Visível apenas à ESQUERDA do slider */}
+                      <div 
                         className="absolute inset-0 flex items-center justify-center overflow-hidden"
+                        style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+                      >
+                        <img
+                          src={originalUrl || ""}
+                          alt="Original"
+                          onDragStart={(e) => e.preventDefault()}
+                          className="max-h-full object-contain"
+                        />
+                      </div>
+                      
+                      {/* Depois (Sem fundo / Cor de fundo aplicada) - Visível apenas à DIREITA do slider */}
+                      <div
+                        className={cn(
+                          "absolute inset-0 flex items-center justify-center overflow-hidden transition-colors duration-200",
+                          bgColor === "transparent" && "bg-checkerboard",
+                          bgColor === "white" && "bg-white",
+                          bgColor === "black" && "bg-black",
+                          bgColor === "gray" && "bg-gray-500"
+                        )}
                         style={{ clipPath: `inset(0 0 0 ${sliderPosition}%)` }}
                       >
                         <img
                           src={resultUrl}
                           alt="Processada"
-                          onDragStart={handleImageDragStart}
+                          onDragStart={(e) => e.preventDefault()}
                           className="max-h-full object-contain"
                         />
                       </div>
