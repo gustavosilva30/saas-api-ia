@@ -884,26 +884,28 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
                 input_image_bytes = f.read()
                 
             alpha_matting = False
-            model_name = "u2netp"
+            model_name = "u2net" # Atualizando o básico para u2net em vez de u2netp
             if tier == "pro":
-                model_name = "u2net"
-                alpha_matting = True
-            elif tier == "premium":
                 model_name = "isnet-general-use"
-                alpha_matting = True
+            elif tier == "premium":
+                model_name = "birefnet-general"
                 
             session = get_session(model_name)
             
             async with ai_semaphore:
+                # Utilizamos post_process_mask=True para limpar chunks indesejados (melhora recortes metálicos e bordas duras)
                 if alpha_matting:
                     output_image_bytes = await asyncio.to_thread(
                         remove,
                         input_image_bytes, session=session, alpha_matting=True,
                         alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10,
-                        alpha_matting_erode_size=10
+                        alpha_matting_erode_size=10, post_process_mask=True
                     )
                 else:
-                    output_image_bytes = await asyncio.to_thread(remove, input_image_bytes, session=session)
+                    output_image_bytes = await asyncio.to_thread(
+                        remove, 
+                        input_image_bytes, session=session, post_process_mask=True
+                    )
                 
             output_filename = f"{job_id}_out.png"
             output_path = os.path.join("storage", output_filename)
