@@ -32,7 +32,10 @@ export function StudioSidebar() {
       {/* Painel do Plugin Ativo */}
       {activePlugin && (
         <div className="h-full border-r bg-background">
-          {plugins.find(p => p.id === activePlugin)?.SidebarComponent?.({})}
+          {(() => {
+            const ActiveComponent = plugins.find(p => p.id === activePlugin)?.SidebarComponent;
+            return ActiveComponent ? <ActiveComponent /> : null;
+          })()}
         </div>
       )}
     </div>
