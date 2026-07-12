@@ -20,6 +20,38 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhos
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+// Comprime a imagem no client-side se for maior que 4MB (limite Vercel)
+const compressImage = async (file: File, maxSizeMB = 4): Promise<File> => {
+  if (file.size <= maxSizeMB * 1024 * 1024) return file;
+  
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let { width, height } = img;
+      const MAX_SIZE = 2000; // Reduz a resolução máxima
+      if (width > height && width > MAX_SIZE) {
+        height *= MAX_SIZE / width;
+        width = MAX_SIZE;
+      } else if (height > MAX_SIZE) {
+        width *= MAX_SIZE / height;
+        height = MAX_SIZE;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(file);
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve(file);
+        resolve(new File([blob], file.name, { type: "image/jpeg" }));
+      }, "image/jpeg", 0.85);
+    };
+    img.onerror = () => resolve(file);
+  });
+};
+
 export const api = {
   // Auth
   async login(email: string, password: string) {
@@ -91,8 +123,12 @@ export const api = {
     }
 
     const startTime = Date.now();
+    
+    // Compress file if it's too large for Vercel (4.5MB limit)
+    const processedFile = await compressImage(file);
+    
     const formData = new FormData()
-    formData.append("image", file)
+    formData.append("image", processedFile)
 
     const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
     const headers: Record<string, string> = {}
