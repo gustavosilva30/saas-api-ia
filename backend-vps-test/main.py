@@ -1,8 +1,8 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import io
-from rembg import remove
+from rembg import remove, new_session
 from PIL import Image
 
 app = FastAPI(
@@ -20,12 +20,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Cache de sessões para não recarregar os modelos a cada requisição
+sessions = {}
+
+def get_session(model_name: str):
+    if model_name not in sessions:
+        sessions[model_name] = new_session(model_name)
+    return sessions[model_name]
+
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "API de Remoção de Fundo funcionando com sucesso."}
 
 @app.post("/remove-bg")
-async def remove_background(file: UploadFile = File(...)):
+async def remove_background(file: UploadFile = File(...), tier: str = Form("basic")):
     # Validação do tipo de arquivo
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
@@ -34,8 +42,34 @@ async def remove_background(file: UploadFile = File(...)):
         # Ler imagem enviada
         input_image_bytes = await file.read()
         
+        # Configurações de acordo com o tier escolhido
+        alpha_matting = False
+        model_name = "u2netp" # Padrão: mais leve e rápido
+        
+        if tier == "pro":
+            model_name = "u2net"
+            alpha_matting = True
+        elif tier == "premium":
+            model_name = "isnet-general-use"
+            alpha_matting = True
+            
+        session = get_session(model_name)
+        
         # Processar a remoção de fundo com rembg
-        output_image_bytes = remove(input_image_bytes)
+        if alpha_matting:
+            output_image_bytes = remove(
+                input_image_bytes,
+                session=session,
+                alpha_matting=True,
+                alpha_matting_foreground_threshold=240,
+                alpha_matting_background_threshold=10,
+                alpha_matting_erode_size=10
+            )
+        else:
+            output_image_bytes = remove(
+                input_image_bytes, 
+                session=session
+            )
         
         # Retornar como streaming de imagem PNG
         return StreamingResponse(io.BytesIO(output_image_bytes), media_type="image/png")

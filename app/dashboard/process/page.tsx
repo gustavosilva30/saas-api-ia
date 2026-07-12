@@ -225,52 +225,53 @@ export default function ProcessPage() {
                   ref={containerRef}
                   onMouseDown={(e) => startDrag(e.clientX)}
                   onTouchStart={(e) => startDrag(e.touches[0].clientX)}
-                  className="relative w-full aspect-video md:aspect-[16/9] rounded-lg border overflow-hidden flex items-center justify-center select-none cursor-ew-resize touch-none bg-muted/20"
+                  className="relative w-full h-[500px] rounded-lg border overflow-hidden flex items-center justify-center select-none cursor-ew-resize touch-none bg-muted/20 p-4"
                 >
                   {!resultUrl ? (
                     <img
                       src={originalUrl || ""}
                       alt="Original"
                       onDragStart={(e) => e.preventDefault()}
-                      className="max-h-full object-contain pointer-events-none"
+                      className="max-h-full max-w-full object-contain pointer-events-none shadow-md rounded"
                     />
                   ) : (
-                    <div className="relative w-full h-full flex items-center justify-center pointer-events-none">
-                      {/* Antes (Original) - Visível apenas à ESQUERDA do slider */}
+                    /* Container que abraça o tamanho exato da imagem */
+                    <div className="relative max-h-full max-w-full flex items-center justify-center shadow-xl rounded overflow-hidden pointer-events-none">
+                      
+                      {/* Fundo dinâmico da imagem completa */}
+                      <div className={cn(
+                        "absolute inset-0 transition-colors duration-200",
+                        bgColor === "transparent" && "bg-checkerboard",
+                        bgColor === "white" && "bg-white",
+                        bgColor === "black" && "bg-black",
+                        bgColor === "gray" && "bg-gray-500"
+                      )} />
+
+                      {/* Imagem Processada (Fica por baixo, preenchendo o container) */}
+                      <img
+                        src={resultUrl}
+                        alt="Processada"
+                        onDragStart={(e) => e.preventDefault()}
+                        className="relative z-10 max-h-full max-w-full object-contain"
+                      />
+
+                      {/* Imagem Original (Fica por cima, com máscara/clip-path) */}
                       <div 
-                        className="absolute inset-0 flex items-center justify-center overflow-hidden"
+                        className="absolute inset-0 z-20 overflow-hidden"
                         style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
                       >
+                        {/* Fundo da original (geralmente branco/transparente, mas a original já tem fundo) */}
                         <img
                           src={originalUrl || ""}
                           alt="Original"
                           onDragStart={(e) => e.preventDefault()}
-                          className="max-h-full object-contain"
+                          className="h-full w-full object-cover"
                         />
                       </div>
                       
-                      {/* Depois (Sem fundo / Cor de fundo aplicada) - Visível apenas à DIREITA do slider */}
-                      <div
-                        className={cn(
-                          "absolute inset-0 flex items-center justify-center overflow-hidden transition-colors duration-200",
-                          bgColor === "transparent" && "bg-checkerboard",
-                          bgColor === "white" && "bg-white",
-                          bgColor === "black" && "bg-black",
-                          bgColor === "gray" && "bg-gray-500"
-                        )}
-                        style={{ clipPath: `inset(0 0 0 ${sliderPosition}%)` }}
-                      >
-                        <img
-                          src={resultUrl}
-                          alt="Processada"
-                          onDragStart={(e) => e.preventDefault()}
-                          className="max-h-full object-contain"
-                        />
-                      </div>
-
                       {/* Divisor do Slider */}
                       <div
-                        className="absolute top-0 bottom-0 w-1 bg-white shadow-xl z-20 pointer-events-none"
+                        className="absolute top-0 bottom-0 w-1 bg-white shadow-xl z-30 pointer-events-none"
                         style={{ left: `${sliderPosition}%` }}
                       >
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-8 rounded-full border-2 border-white bg-primary shadow-lg flex items-center justify-center">
@@ -284,7 +285,7 @@ export default function ProcessPage() {
                   )}
 
                   {loading && (
-                    <div className="absolute inset-0 bg-background/80 backdrop-blur-xs flex flex-col items-center justify-center gap-3 z-40 cursor-default pointer-events-auto">
+                    <div className="absolute inset-0 bg-background/80 backdrop-blur-xs flex flex-col items-center justify-center gap-3 z-50 cursor-default pointer-events-auto">
                       <RefreshCw className="size-8 text-primary animate-spin" />
                       <span className="text-sm font-medium">Processando imagem...</span>
                     </div>
