@@ -124,10 +124,15 @@ export const api = {
   },
   async getApiKeys() {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
-    const res = await fetch(`${API_BASE}/api-keys`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    return res.json()
+    try {
+      const res = await fetch(`${API_BASE}/api-keys`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) return []
+      return await res.json()
+    } catch (e) {
+      return []
+    }
   },
   async createApiKey(name: string): Promise<any> {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
@@ -153,10 +158,15 @@ export const api = {
   // Webhooks
   async getWebhooks() {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
-    const res = await fetch(`${API_BASE}/webhooks`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    return res.json()
+    try {
+      const res = await fetch(`${API_BASE}/webhooks`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) return []
+      return await res.json()
+    } catch (e) {
+      return []
+    }
   },
   async createWebhook(url: string): Promise<any> {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
