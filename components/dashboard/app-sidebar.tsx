@@ -1,12 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { ChevronsUpDown, Check, Plus } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { ChevronsUpDown, Check, Plus, LogOut } from "lucide-react"
 import { navSections } from "@/lib/nav"
 import { currentTenant } from "@/lib/mock-data"
 import { Logo } from "@/components/logo"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Sidebar,
   SidebarContent,
@@ -37,6 +38,7 @@ const workspaces = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
 
   return (
     <Sidebar>
@@ -116,7 +118,7 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="gap-4 pb-4">
         <div className="rounded-lg border bg-gradient-to-b from-accent/50 to-transparent p-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">Créditos</span>
@@ -131,6 +133,14 @@ export function AppSidebar() {
             61.098 de 100.000 restantes
           </p>
         </div>
+        <Button 
+          variant="outline" 
+          className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={() => router.push("/login")}
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Sair
+        </Button>
       </SidebarFooter>
     </Sidebar>
   )

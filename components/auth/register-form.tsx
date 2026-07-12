@@ -30,8 +30,8 @@ export function RegisterForm() {
         company: String(data.get("company")),
         email: String(data.get("email")),
       })
-      toast.success("Conta criada! Redirecionando…")
-      router.push("/dashboard")
+      toast.success("Conta criada! Redirecionando para os planos…")
+      router.push("/onboarding/plans")
     } catch {
       toast.error("Não foi possível criar a conta.")
     } finally {
