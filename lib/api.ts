@@ -14,7 +14,7 @@
 import * as mock from "./mock-data"
 import type { ApiKey, ProcessedImage } from "./types"
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.claro.ai"
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
