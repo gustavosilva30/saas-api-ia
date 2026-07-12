@@ -33,8 +33,35 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import psutil
+import onnxruntime as ort
+import cv2
+import numpy as np
 
 ai_semaphore = asyncio.Semaphore(2)
+
+def resize_for_inference(image_bytes: bytes, max_dim: int = 1600) -> bytes:
+    img = Image.open(io.BytesIO(image_bytes))
+    if max(img.size) > max_dim:
+        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    return image_bytes
+
+def refine_edge(rgba_bytes: bytes, erode_px: int = 1) -> bytes:
+    img = Image.open(io.BytesIO(rgba_bytes)).convert("RGBA")
+    arr = np.array(img)
+    alpha = arr[:, :, 3]
+
+    # Erosão leve só no canal alpha para remover pixels de borda contaminados pelo fundo
+    kernel = np.ones((erode_px * 2 + 1, erode_px * 2 + 1), np.uint8)
+    alpha_eroded = cv2.erode(alpha, kernel, iterations=1)
+    arr[:, :, 3] = alpha_eroded
+
+    out = io.BytesIO()
+    Image.fromarray(arr).save(out, format="PNG")
+    return out.getvalue()
+
 
 ESTIMATED_COST_SECONDS = {
     'bg-removal': 15,
@@ -161,7 +188,11 @@ sessions = {}
 
 def get_session(model_name: str):
     if model_name not in sessions:
-        sessions[model_name] = new_session(model_name)
+        # Configurar threads explicitly to avoid thread contention on CPU
+        sess_options = ort.SessionOptions()
+        sess_options.intra_op_num_threads = 2
+        sess_options.inter_op_num_threads = 1
+        sessions[model_name] = new_session(model_name, providers=["CPUExecutionProvider"], sess_opts=sess_options)
     return sessions[model_name]
 
 @app.on_event("startup")
@@ -696,19 +727,29 @@ async def remove_background(
                 raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
             
         # 3. Processar Imagem
-        model_name = "birefnet-general"
-        
-        # (Lógica de tier removida para forçar qualidade premium em tudo temporariamente)
+        MODEL_BY_TIER = {
+            "basic": "birefnet-general-lite",
+            "pro": "birefnet-general-lite",
+            "premium": "birefnet-general",
+        }
+        model_name = MODEL_BY_TIER.get(tier, "birefnet-general-lite")
         
         session = get_session(model_name)
         
         async with ai_semaphore:
+            # 3.1 Resize for inference to save CPU
+            resized_bytes = resize_for_inference(input_image_bytes, max_dim=1600)
+            
+            # 3.2 Remove background
             output_image_bytes = await asyncio.to_thread(
                 remove, 
-                input_image_bytes, 
+                resized_bytes, 
                 session=session,
                 post_process_mask=False
             )
+            
+            # 3.3 Decontaminate edge
+            output_image_bytes = refine_edge(output_image_bytes, erode_px=1)
         
         # 4. Debitar Saldo
         if role != "superadmin":
@@ -867,24 +908,28 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
             with open(input_path, "rb") as f:
                 input_image_bytes = f.read()
                 
-            alpha_matting = False
-            # birefnet-general é disparado o melhor modelo de salient object detection disponível no rembg,
-            # não gera os chunks (pedaços de fundo) nas bordas de metais e recorta perfeitamente peças mecânicas.
-            model_name = "birefnet-general"
-            
-            # (Mantendo a lógica de fallback se quisermos separar no futuro)
-            # if tier == "basic": ...
-
-                
+            MODEL_BY_TIER = {
+                "basic": "birefnet-general-lite",
+                "pro": "birefnet-general-lite",
+                "premium": "birefnet-general",
+            }
+            model_name = MODEL_BY_TIER.get(tier, "birefnet-general-lite")
             session = get_session(model_name)
             
             async with ai_semaphore:
-                # O post_process_mask e alpha_matting podem "borrar" e destruir a resolução original de metais
-                # ao tentar suavizar o que deveria ser uma "borda dura". Portanto usamos o modelo puro.
+                # 3.1 Resize for inference to save CPU
+                resized_bytes = resize_for_inference(input_image_bytes, max_dim=1600)
+                
+                # 3.2 Remove background puro (sem alpha_matting que borra metais)
                 output_image_bytes = await asyncio.to_thread(
                     remove, 
-                    input_image_bytes, session=session, post_process_mask=False
+                    resized_bytes, 
+                    session=session, 
+                    post_process_mask=False
                 )
+                
+                # 3.3 Decontaminate edge
+                output_image_bytes = refine_edge(output_image_bytes, erode_px=1)
                 
             output_filename = f"{job_id}_out.png"
             output_path = os.path.join("storage", output_filename)
