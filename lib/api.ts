@@ -20,13 +20,33 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export const api = {
   // Auth
-  async login(email: string, _password: string) {
-    await delay(700)
-    return { token: "mock.jwt.token", user: { ...mock.currentUser, email } }
+  async login(email: string, password: string) {
+    const response = await fetch(`${API_BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || "Usuário ou senha incorretos.")
+    }
+    const data = await response.json()
+    localStorage.setItem("auth_token", data.token)
+    return data
   },
-  async register(payload: { company: string; email: string }) {
-    await delay(900)
-    return { token: "mock.jwt.token", tenant: payload.company }
+  async register(payload: any) {
+    const response = await fetch(`${API_BASE}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || "Erro ao realizar o cadastro.")
+    }
+    const data = await response.json()
+    localStorage.setItem("auth_token", data.token)
+    return data
   },
 
   // Dashboard

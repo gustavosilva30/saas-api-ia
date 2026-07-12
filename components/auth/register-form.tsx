@@ -25,15 +25,23 @@ export function RegisterForm() {
     e.preventDefault()
     setLoading(true)
     const data = new FormData(e.currentTarget)
+    const company = String(data.get("company"))
+    const name = String(data.get("name"))
+    const email = String(data.get("email")).trim()
+    const password = String(data.get("password"))
+
     try {
       await api.register({
-        company: String(data.get("company")),
-        email: String(data.get("email")),
+        name,
+        email,
+        password,
+        company,
       })
+      localStorage.setItem("user_email", email)
       toast.success("Conta criada! Redirecionando para os planos…")
       router.push("/onboarding/plans")
-    } catch {
-      toast.error("Não foi possível criar a conta.")
+    } catch (err: any) {
+      toast.error(err.message || "Não foi possível criar a conta.")
     } finally {
       setLoading(false)
     }
