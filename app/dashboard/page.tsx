@@ -1,19 +1,37 @@
+"use client"
+
 import Link from "next/link"
-import { ImageIcon, Layers } from "lucide-react"
+import * as React from "react"
+import { ImageIcon, Layers, FileImage, Cpu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { StatCards } from "@/components/dashboard/stat-cards"
-import { ProcessingChart, UsageChart } from "@/components/dashboard/dashboard-charts"
-import { RecentImages, RecentRequests } from "@/components/dashboard/recent-panels"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Coins, Clock, TrendingUp } from "lucide-react"
 
 export default function DashboardPage() {
+  const [userName, setUserName] = React.useState("Usuário")
+  const [companyName, setCompanyName] = React.useState("sua empresa")
+
+  React.useEffect(() => {
+    const email = localStorage.getItem("user_email")
+    if (email) {
+      if (email === "gsntech.suporte@gmail.com") {
+        setUserName("GSN Tech")
+        setCompanyName("GSN Tech")
+      } else {
+        setUserName(email.split("@")[0])
+        setCompanyName("sua empresa")
+      }
+    }
+  }, [])
+
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
-        title="Bom dia, Marina"
-        description="Aqui está o resumo da atividade da Studio Aurora."
+        title={`Bem-vindo, ${userName}`}
+        description={`Aqui está o resumo da atividade de ${companyName}.`}
       >
-        <Button variant="outline" render={<Link href="/dashboard/batch" />}>
+        <Button variant="outline" render={<Link href="/dashboard/batch" />} disabled>
           <Layers data-icon="inline-start" />
           Lote
         </Button>
@@ -23,17 +41,84 @@ export default function DashboardPage() {
         </Button>
       </PageHeader>
 
-      <StatCards />
+      {/* Cards de Métricas Reais Zerados */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Imagens hoje</CardTitle>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <ImageIcon className="size-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">0</span>
+            <p className="text-xs text-muted-foreground mt-1">Nenhuma imagem hoje</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Imagens este mês</CardTitle>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <TrendingUp className="size-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">0</span>
+            <p className="text-xs text-muted-foreground mt-1">Nenhum processamento</p>
+          </CardContent>
+        </Card>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ProcessingChart />
-        <UsageChart />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Créditos restantes</CardTitle>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Coins className="size-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">0</span>
+            <p className="text-xs text-muted-foreground mt-1">Adicione créditos para usar a API</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Tempo médio</CardTitle>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Clock className="size-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">0.0s</span>
+            <p className="text-xs text-muted-foreground mt-1">Sem requisições</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <RecentImages />
-        <RecentRequests />
+        {/* Últimas Imagens Vazio */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Últimas imagens</CardTitle>
+          </CardHeader>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            <FileImage className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+            <p>Nenhuma imagem processada ainda.</p>
+          </CardContent>
+        </Card>
+
+        {/* Últimas Requisições Vazio */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Últimas requisições</CardTitle>
+          </CardHeader>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            <Cpu className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+            <p>Nenhuma requisição de API registrada.</p>
+          </CardContent>
+        </Card>
       </div>
-    </>
+    </div>
   )
 }

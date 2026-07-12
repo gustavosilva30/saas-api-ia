@@ -26,12 +26,8 @@ export default function AdminPage() {
     }
   }, [router])
 
-  const tenants = [
-    { id: "TEN-001", name: "Studio Aurora", plan: "Premium", credits: 45000, usage: 12000, status: "Ativo" },
-    { id: "TEN-002", name: "PixelForge", plan: "Pro", credits: 8000, usage: 22000, status: "Ativo" },
-    { id: "TEN-003", name: "Loja Verde", plan: "Basic", credits: 0, usage: 50, status: "Inativo" },
-    { id: "TEN-004", name: "Tech Solutions", plan: "Premium", credits: 120000, usage: 4500, status: "Ativo" },
-  ];
+  const tenants = [];
+  const payments = [];
 
   if (isAuthorized === null) {
     return (
@@ -52,7 +48,7 @@ export default function AdminPage() {
         description="Visão global do sistema SaaS, clientes, faturamento e controle de preços."
       />
 
-      {/* KPIs Globais */}
+      {/* KPIs Globais Zerados */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -60,8 +56,8 @@ export default function AdminPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ 14.590,00</div>
-            <p className="text-xs text-muted-foreground">+12% em relação ao mês passado</p>
+            <div className="text-2xl font-bold">R$ 0,00</div>
+            <p className="text-xs text-muted-foreground">Sem assinaturas ativas</p>
           </CardContent>
         </Card>
         <Card>
@@ -70,8 +66,8 @@ export default function AdminPage() {
             <Building className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">+245</div>
-            <p className="text-xs text-muted-foreground">+18 novos clientes esta semana</p>
+            <div className="text-2xl font-bold">0</div>
+            <p className="text-xs text-muted-foreground">Aguardando primeiros cadastros</p>
           </CardContent>
         </Card>
         <Card>
@@ -80,8 +76,8 @@ export default function AdminPage() {
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1.2M</div>
-            <p className="text-xs text-muted-foreground">Apenas neste mês</p>
+            <div className="text-2xl font-bold">0</div>
+            <p className="text-xs text-muted-foreground">Volume acumulado da API</p>
           </CardContent>
         </Card>
         <Card>
@@ -91,7 +87,7 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-500">Operacional</div>
-            <p className="text-xs text-muted-foreground">Nenhum incidente nas últimas 24h</p>
+            <p className="text-xs text-muted-foreground">Todos os serviços ativos</p>
           </CardContent>
         </Card>
       </div>
@@ -112,44 +108,53 @@ export default function AdminPage() {
               <CardDescription>Gerencie todos os clientes que utilizam a API de remoção de fundo.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-2 mb-4">
-                <Search className="w-4 h-4 text-muted-foreground absolute ml-3" />
-                <Input placeholder="Buscar empresa por nome ou ID..." className="pl-9 max-w-sm" />
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Plano</TableHead>
-                    <TableHead className="text-right">Créditos</TableHead>
-                    <TableHead className="text-right">Uso (Mês)</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tenants.map((t) => (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{t.id}</TableCell>
-                      <TableCell className="font-medium">{t.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{t.plan}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{t.credits.toLocaleString()}</TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">{t.usage.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Badge variant={t.status === 'Ativo' ? 'default' : 'secondary'} className={t.status === 'Ativo' ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20' : ''}>
-                          {t.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon"><MoreHorizontal className="w-4 h-4" /></Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              {tenants.length > 0 ? (
+                <>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Search className="w-4 h-4 text-muted-foreground absolute ml-3" />
+                    <Input placeholder="Buscar empresa por nome ou ID..." className="pl-9 max-w-sm" />
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Plano</TableHead>
+                        <TableHead className="text-right">Créditos</TableHead>
+                        <TableHead className="text-right">Uso (Mês)</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tenants.map((t: any) => (
+                        <TableRow key={t.id}>
+                          <TableCell className="font-mono text-xs text-muted-foreground">{t.id}</TableCell>
+                          <TableCell className="font-medium">{t.name}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{t.plan}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{t.credits.toLocaleString()}</TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">{t.usage.toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Badge variant={t.status === 'Ativo' ? 'default' : 'secondary'} className={t.status === 'Ativo' ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20' : ''}>
+                              {t.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="icon"><MoreHorizontal className="w-4 h-4" /></Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
+              ) : (
+                <div className="p-8 text-center text-muted-foreground flex flex-col items-center">
+                  <Building className="w-12 h-12 text-muted-foreground/30 mb-3" />
+                  <p>Nenhuma empresa cadastrada no momento.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -211,30 +216,33 @@ export default function AdminPage() {
               <CardDescription>Lista em tempo real dos pagamentos compensados pelo gateway (Stripe/MercadoPago).</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Empresa</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Descrição</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>Hoje, 10:23</TableCell>
-                    <TableCell>Studio Aurora</TableCell>
-                    <TableCell className="text-green-500 font-medium">+ R$ 149,90</TableCell>
-                    <TableCell>Assinatura Premium Mensal</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Ontem, 16:45</TableCell>
-                    <TableCell>PixelForge</TableCell>
-                    <TableCell className="text-green-500 font-medium">+ R$ 50,00</TableCell>
-                    <TableCell>Recarga Avulsa de Créditos (5.000)</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+              {payments.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Empresa</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Descrição</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payments.map((p: any) => (
+                      <TableRow key={p.id}>
+                        <TableCell>{p.date}</TableCell>
+                        <TableCell>{p.company}</TableCell>
+                        <TableCell className="text-green-500 font-medium">+ R$ {p.amount}</TableCell>
+                        <TableCell>{p.description}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="p-8 text-center text-muted-foreground flex flex-col items-center">
+                  <DollarSign className="w-12 h-12 text-muted-foreground/30 mb-3" />
+                  <p>Nenhum pagamento registrado no momento.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
