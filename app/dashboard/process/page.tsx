@@ -1,12 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { Upload, ImageIcon, Download, RefreshCw, AlertCircle } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { Upload, ImageIcon, Download, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { api } from "@/lib/api"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
+
+type BgColor = "transparent" | "white" | "black" | "gray"
 
 export default function ProcessPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -15,11 +18,53 @@ export default function ProcessPage() {
   const [loading, setLoading] = useState(false)
   const [sliderPosition, setSliderPosition] = useState(50)
   const [isDragging, setIsDragging] = useState(false)
+  const [bgColor, setBgColor] = useState<BgColor>("transparent")
+  
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isPointerDown = useRef(false)
+
+  // Manipulação de clique e arrasto no Slider (Mais confiável que input range)
+  const handlePointerMove = (clientX: number) => {
+    if (!containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    const x = clientX - rect.left
+    const position = Math.max(0, Math.min(100, (x / rect.width) * 100))
+    setSliderPosition(position)
+  }
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    isPointerDown.current = true
+    handlePointerMove(e.clientX)
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isPointerDown.current) return
+    handlePointerMove(e.clientX)
+  }
+
+  const handleMouseUpOrLeave = () => {
+    isPointerDown.current = false
+  }
+
+  // Suporte a Touch screen (celulares)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    isPointerDown.current = true
+    handlePointerMove(e.touches[0].clientX)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPointerDown.current) return
+    handlePointerMove(e.touches[0].clientX)
+  }
+
+  // Prevenir arrasto de imagem padrão do navegador
+  const handleImageDragStart = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0]
-      setupImages(selectedFile)
+      setupImages(e.target.files[0])
     }
   }
 
@@ -54,7 +99,7 @@ export default function ProcessPage() {
   const handleProcess = async () => {
     if (!file) return
     setLoading(true)
-    const toastId = toast.loading("Enviando imagem para a IA...")
+    const toastId = toast.loading("Removendo o fundo com IA...")
 
     try {
       const result = await api.removeBackground(file)
@@ -62,33 +107,71 @@ export default function ProcessPage() {
       toast.success("Fundo removido com sucesso!", { id: toastId })
     } catch (err: any) {
       console.error(err)
-      toast.error(err.message || "Erro ao conectar com a API da VPS. Verifique se o servidor está online.", { id: toastId })
+      toast.error(err.message || "Erro ao conectar com a API. Verifique a VPS.", { id: toastId })
     } finally {
       setLoading(false)
     }
   }
 
+  // Função para baixar a imagem mesclando a cor de fundo selecionada
   const handleDownload = () => {
     if (!resultUrl || !file) return
-    const link = document.createElement("a")
-    link.href = resultUrl
-    link.download = `sem-fundo-${file.name.split(".")[0]}.png`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+
+    // Se o fundo for transparente, baixa o PNG direto
+    if (bgColor === "transparent") {
+      const link = document.createElement("a")
+      link.href = resultUrl
+      link.download = `sem-fundo-${file.name.split(".")[0]}.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      return
+    }
+
+    // Se houver uma cor selecionada, mescla usando Canvas
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.onload = () => {
+      const canvas = document.createElement("canvas")
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext("2d")
+
+      if (ctx) {
+        // Define a cor de fundo
+        if (bgColor === "white") ctx.fillStyle = "#ffffff"
+        else if (bgColor === "black") ctx.fillStyle = "#000000"
+        else if (bgColor === "gray") ctx.fillStyle = "#808080"
+        
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        
+        // Desenha a imagem processada por cima
+        ctx.drawImage(img, 0, 0)
+
+        // Gera o download
+        const link = document.createElement("a")
+        link.href = canvas.toDataURL("image/png")
+        link.download = `fundo-${bgColor}-${file.name.split(".")[0]}.png`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+    }
+    img.src = resultUrl
   }
 
   const handleReset = () => {
     setFile(null)
     setOriginalUrl(null)
     setResultUrl(null)
+    setBgColor("transparent")
   }
 
   return (
     <>
       <PageHeader
         title="Processar imagem"
-        description="Faça upload de uma imagem e nossa inteligência artificial removerá o fundo automaticamente."
+        description="Faça upload de uma imagem e remova o fundo automaticamente usando nossa IA."
       />
 
       <div className="grid gap-6 max-w-4xl mx-auto">
@@ -99,11 +182,12 @@ export default function ProcessPage() {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-12 text-center transition-all ${
+                className={cn(
+                  "flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-12 text-center transition-all",
                   isDragging
                     ? "border-primary bg-primary/5 scale-[0.99]"
-                    : "border-muted hover:border-primary/50 bg-muted/20"
-                }`}
+                    : "border-border hover:border-primary/50 bg-muted/10"
+                )}
               >
                 <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-4">
                   <Upload className="size-6" />
@@ -125,26 +209,42 @@ export default function ProcessPage() {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Visualizador */}
-                <div className="relative w-full aspect-video md:aspect-[16/9] rounded-lg border overflow-hidden bg-checkerboard flex items-center justify-center">
+                {/* Visualizador de Imagem */}
+                <div
+                  ref={containerRef}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUpOrLeave}
+                  onMouseLeave={handleMouseUpOrLeave}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleMouseUpOrLeave}
+                  className={cn(
+                    "relative w-full aspect-video md:aspect-[16/9] rounded-lg border overflow-hidden flex items-center justify-center select-none cursor-ew-resize",
+                    bgColor === "transparent" && "bg-checkerboard",
+                    bgColor === "white" && "bg-white",
+                    bgColor === "black" && "bg-black",
+                    bgColor === "gray" && "bg-gray-500"
+                  )}
+                >
                   {!resultUrl ? (
-                    // Imagem original antes do processamento
                     <img
                       src={originalUrl || ""}
                       alt="Original"
-                      className="max-h-full object-contain"
+                      onDragStart={handleImageDragStart}
+                      className="max-h-full object-contain pointer-events-none"
                     />
                   ) : (
-                    // Comparador de Slider (Antes/Depois)
-                    <div className="relative w-full h-full select-none overflow-hidden flex items-center justify-center">
-                      {/* Antes (Fundo) */}
+                    <div className="relative w-full h-full flex items-center justify-center pointer-events-none">
+                      {/* Antes (Original) */}
                       <img
                         src={originalUrl || ""}
                         alt="Original"
-                        className="absolute max-h-full object-contain pointer-events-none"
+                        onDragStart={handleImageDragStart}
+                        className="absolute max-h-full object-contain"
                       />
                       
-                      {/* Depois (Frente com clip) */}
+                      {/* Depois (Sem fundo / Cor de fundo aplicada) */}
                       <div
                         className="absolute inset-0 flex items-center justify-center overflow-hidden"
                         style={{ clipPath: `inset(0 0 0 ${sliderPosition}%)` }}
@@ -152,27 +252,18 @@ export default function ProcessPage() {
                         <img
                           src={resultUrl}
                           alt="Processada"
-                          className="max-h-full object-contain pointer-events-none"
+                          onDragStart={handleImageDragStart}
+                          className="max-h-full object-contain"
                         />
                       </div>
 
-                      {/* Controle do Slider */}
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={sliderPosition}
-                        onChange={(e) => setSliderPosition(Number(e.target.value))}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-30"
-                      />
-
-                      {/* Barra Visual do Divisor */}
+                      {/* Divisor do Slider */}
                       <div
-                        className="absolute top-0 bottom-0 w-1 bg-white cursor-ew-resize z-20 pointer-events-none shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+                        className="absolute top-0 bottom-0 w-1 bg-white shadow-xl z-20 pointer-events-none"
                         style={{ left: `${sliderPosition}%` }}
                       >
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-8 rounded-full border-2 border-white bg-primary shadow-lg flex items-center justify-center">
-                          <div className="flex gap-0.5">
+                          <div className="flex gap-0.5 pointer-events-none">
                             <div className="w-0.5 h-3 bg-white rounded-full" />
                             <div className="w-0.5 h-3 bg-white rounded-full" />
                           </div>
@@ -182,14 +273,59 @@ export default function ProcessPage() {
                   )}
 
                   {loading && (
-                    <div className="absolute inset-0 bg-background/70 backdrop-blur-xs flex flex-col items-center justify-center gap-3 z-40">
+                    <div className="absolute inset-0 bg-background/80 backdrop-blur-xs flex flex-col items-center justify-center gap-3 z-40 cursor-default pointer-events-auto">
                       <RefreshCw className="size-8 text-primary animate-spin" />
-                      <span className="text-sm font-medium">Removendo o fundo com IA...</span>
+                      <span className="text-sm font-medium">Processando imagem...</span>
                     </div>
                   )}
                 </div>
 
-                {/* Controles de Ação */}
+                {/* Seletores de Cor de Fundo */}
+                {resultUrl && (
+                  <div className="flex flex-col gap-2 items-center justify-center sm:flex-row sm:justify-between border-y py-4">
+                    <span className="text-sm font-medium text-muted-foreground">Cor de Fundo:</span>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setBgColor("transparent")}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg border text-xs font-semibold bg-checkerboard shadow-xs transition-all",
+                          bgColor === "transparent" ? "ring-2 ring-primary border-primary scale-105" : "border-border opacity-70 hover:opacity-100"
+                        )}
+                      >
+                        Transparente
+                      </button>
+                      <button
+                        onClick={() => setBgColor("white")}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg border text-xs font-semibold bg-white text-black shadow-xs transition-all",
+                          bgColor === "white" ? "ring-2 ring-primary border-primary scale-105" : "border-border opacity-70 hover:opacity-100"
+                        )}
+                      >
+                        Branco
+                      </button>
+                      <button
+                        onClick={() => setBgColor("black")}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg border text-xs font-semibold bg-black text-white shadow-xs transition-all",
+                          bgColor === "black" ? "ring-2 ring-primary border-primary scale-105" : "border-border opacity-70 hover:opacity-100"
+                        )}
+                      >
+                        Preto
+                      </button>
+                      <button
+                        onClick={() => setBgColor("gray")}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg border text-xs font-semibold bg-gray-500 text-white shadow-xs transition-all",
+                          bgColor === "gray" ? "ring-2 ring-primary border-primary scale-105" : "border-border opacity-70 hover:opacity-100"
+                        )}
+                      >
+                        Cinza
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Botões de Ação */}
                 <div className="flex flex-col sm:flex-row gap-3 justify-end items-center">
                   <Button variant="ghost" onClick={handleReset} disabled={loading} className="w-full sm:w-auto">
                     Limpar
@@ -203,7 +339,7 @@ export default function ProcessPage() {
                   ) : (
                     <Button onClick={handleDownload} className="w-full sm:w-auto">
                       <Download className="mr-2 size-4" />
-                      Baixar Imagem (PNG)
+                      Baixar Imagem ({bgColor === "transparent" ? "PNG" : "JPEG/PNG"})
                     </Button>
                   )}
                 </div>
