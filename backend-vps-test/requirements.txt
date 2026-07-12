@@ -14,3 +14,7 @@ email-validator
 torch
 transformers
 psutil
+onnxruntime
+opencv-python-headless
+huggingface-hub
+numpy<2.0.0

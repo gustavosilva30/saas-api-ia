@@ -215,6 +215,16 @@ def startup_db_setup():
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS presets (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                steps JSONB NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
         conn.commit()
 
         cur.execute("SELECT id FROM organizations WHERE name = 'GSN Tech' LIMIT 1;")
@@ -700,6 +710,41 @@ async def remove_background(
     finally:
         conn.close()
 
+@app.post("/ai/smart-select", tags=["IA Síncrona"], summary="Seleção Inteligente (MobileSAM)")
+@limiter.limit("30/minute")
+async def smart_select(
+    request: Request,
+    file: UploadFile = File(...),
+    points: str = Form(...), # ex: '[{"x": 100, "y": 200, "label": 1}]'
+    org_id: str = Depends(get_current_org_id)
+):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
+    
+    input_image_bytes = await file.read()
+    if len(input_image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="O arquivo excede o limite de 10MB.")
+        
+    try:
+        pts = json.loads(points)
+    except:
+        raise HTTPException(status_code=400, detail="Pontos inválidos.")
+        
+    async with ai_semaphore:
+        # Aqui entra a inferência do MobileSAM (usando ONNX)
+        # Como o download de pesos do SAM é pesado, simularemos a devolução de uma máscara (em branco)
+        # Futuramente: session = onnxruntime.InferenceSession("mobilesam.onnx")
+        
+        # Simulação: Retorna uma máscara do tamanho da imagem toda branca, mas com alpha
+        image = Image.open(io.BytesIO(input_image_bytes)).convert("RGBA")
+        mask = Image.new("RGBA", image.size, (255, 255, 255, 255))
+        
+        output_buffer = io.BytesIO()
+        mask.save(output_buffer, format="PNG")
+        output_image_bytes = output_buffer.getvalue()
+        
+    return StreamingResponse(io.BytesIO(output_image_bytes), media_type="image/png")
+
 # --- AI Integration Helpers ---
 clip_model = None
 clip_processor = None
@@ -783,7 +828,7 @@ def ollama_generate_copy(category: str):
     }
 
 # Job System Endpoints e Worker
-async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_path: str = None, category_arg: str = None):
+async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_path: str = None, category_arg: str = None, mask_path: str = None):
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -826,6 +871,66 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
                 
             result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
 
+        elif job_type == 'inpaint':
+            # Simulação do LaMa (big-lama ONNX)
+            # Na implementação real: carrega onnxruntime, redimensiona imagem/mascara para multiplos de 8, roda o tensor, restaura tamanho.
+            async with ai_semaphore:
+                # Aqui iria o await asyncio.to_thread(run_lama_inpaint, input_path, mask_path)
+                # Como simulador por agora (sem pesos pesados): devolve a imagem original
+                with open(input_path, "rb") as f:
+                    output_image_bytes = f.read()
+            
+            output_filename = f"{job_id}_inpaint_out.png"
+            output_path = os.path.join("storage", output_filename)
+            with open(output_path, "wb") as f:
+                f.write(output_image_bytes)
+            result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
+
+        elif job_type == 'upscale':
+            # Simulação do RealESRGAN (realesr-general-x4v3 ONNX)
+            async with ai_semaphore:
+                # await asyncio.to_thread(run_realesrgan_upscale, input_path)
+                image = Image.open(input_path)
+                # Simulação upscale simples (Bicubic) em vez do AI
+                new_size = (image.width * 4, image.height * 4)
+                upscaled = image.resize(new_size, Image.Resampling.BICUBIC)
+                
+                output_buffer = io.BytesIO()
+                upscaled.save(output_buffer, format="PNG")
+                output_image_bytes = output_buffer.getvalue()
+
+            output_filename = f"{job_id}_upscale_out.png"
+            output_path = os.path.join("storage", output_filename)
+            with open(output_path, "wb") as f:
+                f.write(output_image_bytes)
+            result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
+
+        elif job_type == 'preset-apply':
+            # Simulação de Batch Processing usando presets no Backend
+            async with ai_semaphore:
+                # Na implementação real, baixar a imagem da URL, processar via Pipeline
+                # 1. Download image
+                # 2. for step in preset['steps']:
+                #       if step['type'] == 'bg-removal': image = remove(image)
+                #       if step['type'] == 'brightness': image = ImageEnhance.Brightness(image).enhance(step['value'])
+                #       ...
+                # Aqui retornamos uma imagem de sucesso temporaria simulando o final
+                if input_path and os.path.exists(input_path):
+                    image = Image.open(input_path)
+                else:
+                    # Imagem de placeholder 
+                    image = Image.new("RGBA", (800, 800), (255, 255, 255, 255))
+                
+                output_buffer = io.BytesIO()
+                image.save(output_buffer, format="PNG")
+                output_image_bytes = output_buffer.getvalue()
+
+            output_filename = f"{job_id}_preset_out.png"
+            output_path = os.path.join("storage", output_filename)
+            with open(output_path, "wb") as f:
+                f.write(output_image_bytes)
+            result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
+
         elif job_type == 'campaign-analyze':
             with open(input_path, "rb") as f:
                 input_image_bytes = f.read()
@@ -863,6 +968,8 @@ async def create_job(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
+    mask: UploadFile = File(None),
+    job_type: str = Form("bg-removal"),
     tier: str = Form("basic"), 
     org_id: str = Depends(get_current_org_id),
     role: str = Depends(get_current_role)
@@ -870,8 +977,12 @@ async def create_job(
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
         
-    costs = {"basic": 1, "pro": 3, "premium": 5}
-    cost = costs.get(tier, 1)
+    valid_jobs = ["bg-removal", "inpaint", "upscale"]
+    if job_type not in valid_jobs:
+        raise HTTPException(status_code=400, detail="Tipo de job inválido.")
+        
+    costs = {"bg-removal": {"basic": 1, "pro": 3, "premium": 5}, "inpaint": {"basic": 3}, "upscale": {"basic": 4}}
+    cost = costs.get(job_type, {}).get(tier, 1)
     
     conn = get_db_connection()
     try:
@@ -885,10 +996,11 @@ async def create_job(
         plan = org_data['plan']
         balance = org_data['credits_balance']
         
-        if tier == "pro" and plan not in ["pro", "premium"]:
-            raise HTTPException(status_code=403, detail="O Tier Pro exige plano Pro ou Premium.")
-        if tier == "premium" and plan != "premium":
-            raise HTTPException(status_code=403, detail="O Tier Premium exige plano Premium.")
+        if job_type == 'bg-removal':
+            if tier == "pro" and plan not in ["pro", "premium"]:
+                raise HTTPException(status_code=403, detail="O Tier Pro exige plano Pro ou Premium.")
+            if tier == "premium" and plan != "premium":
+                raise HTTPException(status_code=403, detail="O Tier Premium exige plano Premium.")
             
         if role != "superadmin":
             if balance < cost:
@@ -896,13 +1008,17 @@ async def create_job(
             
         input_image_bytes = await file.read()
         
-        # Limite de Upload de 20MB
         if len(input_image_bytes) > 20 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="O arquivo excede o limite de 20MB.")
             
         image = Image.open(io.BytesIO(input_image_bytes))
-        if image.width > 2048 or image.height > 2048:
-            raise HTTPException(status_code=400, detail="A imagem excede o limite de 2048x2048 pixels.")
+        
+        if job_type == 'upscale':
+            if image.width > 1500 or image.height > 1500:
+                raise HTTPException(status_code=400, detail="Para upscale, a imagem deve ter no máximo 1500x1500px.")
+        else:
+            if image.width > 2048 or image.height > 2048:
+                raise HTTPException(status_code=400, detail="A imagem excede o limite de 2048x2048 pixels.")
         
         if role != "superadmin":
             new_balance = balance - cost
@@ -911,13 +1027,13 @@ async def create_job(
             new_balance = balance
         
         # Insert Job
-        cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'bg-removal') RETURNING id;", (org_id, tier))
+        cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', %s) RETURNING id;", (org_id, tier, job_type))
         job_id = str(cur.fetchone()['id'])
         
         if role != "superadmin":
             cur.execute(
                 "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
-                (org_id, -cost, f"job bg-removal ({tier})", job_id, new_balance)
+                (org_id, -cost, f"job {job_type} ({tier})", job_id, new_balance)
             )
         
         conn.commit()
@@ -928,9 +1044,16 @@ async def create_job(
         with open(input_path, "wb") as f:
             f.write(input_image_bytes)
             
-        background_tasks.add_task(process_job_task, job_id, org_id, tier, 'bg-removal', input_path)
+        mask_path = None
+        if mask and job_type == 'inpaint':
+            mask_bytes = await mask.read()
+            mask_path = os.path.join("storage", f"{job_id}_mask.png")
+            with open(mask_path, "wb") as f:
+                f.write(mask_bytes)
+            
+        background_tasks.add_task(process_job_task, job_id, org_id, tier, job_type, input_path, mask_path=mask_path)
         
-        return {"job_id": job_id, "status": "pending", "message": "Job de remoção de fundo aceito."}
+        return {"job_id": job_id, "status": "pending", "message": f"Job de {job_type} aceito."}
     except HTTPException:
         conn.conn.rollback()
         raise
@@ -1099,10 +1222,12 @@ class CreateApiKeyPayload(BaseModel):
 def get_api_keys(org_id: str = Depends(get_current_org_id)):
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT id, name, prefix, last_used_at, created_at FROM api_keys WHERE organization_id = %s ORDER BY created_at DESC;", (org_id,))
+    cur.execute("SELECT id, name, last_used_at, created_at FROM api_keys WHERE organization_id = %s;", (org_id,))
     keys = cur.fetchall()
     cur.close()
     conn.close()
+    for k in keys:
+        k['id'] = str(k['id'])
     return keys
 
 @app.post("/api-keys")
@@ -1215,3 +1340,84 @@ def get_resources():
         "memory_total_mb": psutil.virtual_memory().total / (1024 * 1024)
     }
 
+# --- Presets / Recipes ---
+class PresetPayload(BaseModel):
+    name: str
+    steps: list
+
+@app.post("/presets", tags=["IA Assíncrona"], summary="Criar Receita de Edição")
+def create_preset(payload: PresetPayload, org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            "INSERT INTO presets (organization_id, name, steps) VALUES (%s, %s, %s) RETURNING id, name;",
+            (org_id, payload.name, json.dumps(payload.steps))
+        )
+        preset = cur.fetchone()
+        conn.commit()
+        return {"id": str(preset['id']), "name": preset['name']}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+class BatchApplyPayload(BaseModel):
+    image_urls: list[str]
+    tier: str = "basic"
+
+@app.post("/presets/{preset_id}/apply-batch", tags=["IA Assíncrona"], summary="Aplicar Receita em Lote")
+def apply_preset_batch(
+    preset_id: str, 
+    payload: BatchApplyPayload, 
+    background_tasks: BackgroundTasks,
+    org_id: str = Depends(get_current_org_id),
+    role: str = Depends(get_current_role)
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT steps FROM presets WHERE id = %s AND organization_id = %s;", (preset_id, org_id))
+        preset = cur.fetchone()
+        if not preset:
+            raise HTTPException(status_code=404, detail="Preset não encontrado.")
+            
+        cur.execute("SELECT plan, credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
+        org_data = cur.fetchone()
+        
+        cost_per_image = {"basic": 1, "pro": 3, "premium": 5}.get(payload.tier, 1)
+        total_cost = cost_per_image * len(payload.image_urls)
+        
+        balance = org_data['credits_balance']
+        if role != "superadmin" and balance < total_cost:
+            raise HTTPException(status_code=402, detail=f"Saldo insuficiente. Necessário {total_cost} créditos.")
+            
+        if role != "superadmin":
+            new_balance = balance - total_cost
+            cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        
+        job_ids = []
+        for url in payload.image_urls:
+            cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'preset-apply') RETURNING id;", (org_id, payload.tier))
+            job_id = str(cur.fetchone()['id'])
+            job_ids.append(job_id)
+            
+            # TODO: Add logic to process preset-apply job_type in process_job_task
+            
+        if role != "superadmin":
+            cur.execute(
+                "INSERT INTO credit_transactions (organization_id, amount, reason, balance_after) VALUES (%s, %s, %s, %s);",
+                (org_id, -total_cost, f"batch preset-apply ({payload.tier})", new_balance)
+            )
+            
+        conn.commit()
+        return {"message": f"{len(job_ids)} jobs criados com sucesso.", "job_ids": job_ids}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
