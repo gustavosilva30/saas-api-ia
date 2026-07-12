@@ -116,11 +116,7 @@ export const api = {
     const billingStore = useBillingStore.getState();
     const analyticsStore = useAnalyticsStore.getState();
     
-    // Check credits before request
-    const creditsNeeded = 1;
-    if (billingStore.totalCredits - billingStore.usedCredits < creditsNeeded) {
-      throw new Error("Créditos insuficientes. Por favor, recarregue sua conta.");
-    }
+    // Não verificamos mais créditos no frontend. A responsabilidade total é do Backend.
 
     const startTime = Date.now();
     
@@ -144,6 +140,12 @@ export const api = {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Erro desconhecido")
+      if (response.status === 402) {
+        throw new Error(`Saldo insuficiente: ${errorText}`)
+      }
+      if (response.status === 403) {
+        throw new Error(`Plano incompatível com o Tier solicitado: ${errorText}`)
+      }
       throw new Error(`Falha ao remover o fundo: ${errorText}`)
     }
 
@@ -153,8 +155,10 @@ export const api = {
     const durationMs = Date.now() - startTime;
     const jobId = `job_${Date.now()}`;
     
+    // O backend já debitou. Apenas chamamos refresh no store para atualizar a UI
+    billingStore.refreshBalance();
+    
     // Log Cost Engine and Analytics
-    billingStore.consumeCredits(creditsNeeded, "u2netp", jobId);
     analyticsStore.logProcessing(durationMs);
 
     return {
@@ -244,6 +248,22 @@ export const api = {
   },
 
   // Billing & credits
+  async getBillingBalance() {
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const res = await fetch(`${API_BASE}/billing/balance`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error("Erro ao carregar saldo")
+    return res.json()
+  },
+  async getBillingTransactions() {
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const res = await fetch(`${API_BASE}/billing/transactions`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error("Erro ao carregar histórico")
+    return res.json()
+  },
   async getCreditSummary() {
     await delay(300)
     return mock.creditSummary

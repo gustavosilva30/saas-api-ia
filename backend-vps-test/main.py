@@ -138,6 +138,22 @@ def startup_db_setup():
         cur = conn.cursor()
         
         cur.execute("""
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS credits_balance INT DEFAULT 50;
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS credit_transactions (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                amount INT NOT NULL,
+                reason VARCHAR(255) NOT NULL,
+                job_id VARCHAR(255),
+                balance_after INT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS webhooks (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -454,7 +470,33 @@ async def remove_background(
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
     
+    # 1. Definir custo
+    costs = {"basic": 1, "pro": 3, "premium": 5}
+    cost = costs.get(tier, 1)
+    
+    conn = get_db_connection()
     try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 2. Verificar Saldo e Plano
+        cur.execute("SELECT plan, credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
+        org_data = cur.fetchone()
+        
+        if not org_data:
+            raise HTTPException(status_code=404, detail="Organização não encontrada.")
+            
+        plan = org_data['plan']
+        balance = org_data['credits_balance']
+        
+        if tier == "pro" and plan not in ["pro", "premium"]:
+            raise HTTPException(status_code=403, detail="O Tier Pro exige plano Pro ou Premium.")
+        if tier == "premium" and plan != "premium":
+            raise HTTPException(status_code=403, detail="O Tier Premium exige plano Premium.")
+            
+        if balance < cost:
+            raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
+            
+        # 3. Processar Imagem (Em RAM, ainda síncrono mas logo após as checagens comerciais)
         input_image_bytes = await file.read()
         
         alpha_matting = False
@@ -484,12 +526,53 @@ async def remove_background(
                 session=session
             )
         
+        # 4. Debitar Saldo (Transação Atômica)
+        new_balance = balance - cost
+        cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        
+        cur.execute(
+            "INSERT INTO credit_transactions (organization_id, amount, reason, balance_after) VALUES (%s, %s, %s, %s);",
+            (org_id, -cost, f"remove-bg ({tier})", new_balance)
+        )
+        
+        conn.commit()
+        cur.close()
+        
         background_tasks.add_task(dispatch_webhooks, org_id, tier)
 
         return StreamingResponse(io.BytesIO(output_image_bytes), media_type="image/png")
         
+    except HTTPException:
+        conn.conn.rollback() # Acesso ao conn interno
+        raise
     except Exception as e:
+        conn.conn.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao processar imagem: {str(e)}")
+    finally:
+        conn.close()
+
+# Billing Endpoints
+@app.get("/billing/balance")
+def get_billing_balance(org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT plan, credits_balance FROM organizations WHERE id = %s LIMIT 1;", (org_id,))
+    data = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not data:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"plan": data['plan'], "credits": data['credits_balance']}
+
+@app.get("/billing/transactions")
+def get_billing_transactions(org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT amount, reason, created_at, balance_after FROM credit_transactions WHERE organization_id = %s ORDER BY created_at DESC LIMIT 50;", (org_id,))
+    transactions = cur.fetchall()
+    cur.close()
+    conn.close()
+    return transactions
 
 class CreateApiKeyPayload(BaseModel):
     name: str
