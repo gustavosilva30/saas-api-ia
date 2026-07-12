@@ -1,5 +1,7 @@
 "use client"
 
+import { useRouter } from "next/navigation"
+import * as React from "react"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -11,12 +13,37 @@ import { Label } from "@/components/ui/label"
 import { Search, Building, DollarSign, Activity, MoreHorizontal, ShieldAlert, BarChart3, Receipt } from "lucide-react"
 
 export default function AdminPage() {
+  const router = useRouter()
+  const [isAuthorized, setIsAuthorized] = React.useState<boolean | null>(null)
+
+  React.useEffect(() => {
+    const email = localStorage.getItem("user_email")
+    if (email === "gsntech.suporte@gmail.com") {
+      setIsAuthorized(true)
+    } else {
+      setIsAuthorized(false)
+      router.push("/dashboard")
+    }
+  }, [router])
+
   const tenants = [
     { id: "TEN-001", name: "Studio Aurora", plan: "Premium", credits: 45000, usage: 12000, status: "Ativo" },
     { id: "TEN-002", name: "PixelForge", plan: "Pro", credits: 8000, usage: 22000, status: "Ativo" },
     { id: "TEN-003", name: "Loja Verde", plan: "Basic", credits: 0, usage: 50, status: "Inativo" },
     { id: "TEN-004", name: "Tech Solutions", plan: "Premium", credits: 120000, usage: 4500, status: "Ativo" },
   ];
+
+  if (isAuthorized === null) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <p className="text-muted-foreground">Verificando autorização...</p>
+      </div>
+    )
+  }
+
+  if (!isAuthorized) {
+    return null // Redirecionando...
+  }
 
   return (
     <div className="space-y-6">

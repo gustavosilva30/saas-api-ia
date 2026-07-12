@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { ChevronsUpDown, Check, Plus, LogOut } from "lucide-react"
@@ -39,6 +40,12 @@ const workspaces = [
 export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const [isAdmin, setIsAdmin] = React.useState(false)
+
+  React.useEffect(() => {
+    const email = localStorage.getItem("user_email")
+    setIsAdmin(email === "gsntech.suporte@gmail.com")
+  }, [])
 
   return (
     <Sidebar>
@@ -88,34 +95,40 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="gap-0 px-1">
-        {navSections.map((section) => (
-          <SidebarGroup key={section.label}>
-            <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
-            <SidebarMenu>
-              {section.items.map((item) => {
-                const active =
-                  item.href === "/dashboard"
-                    ? pathname === "/dashboard"
-                    : pathname.startsWith(item.href)
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      isActive={active}
-                      tooltip={item.title}
-                      render={<Link href={item.href} />}
-                    >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                    {item.badge && (
-                      <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>
-                    )}
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroup>
-        ))}
+        {navSections.map((section) => {
+          // Se a seção for "Administração", só renderiza se for superadmin
+          if (section.label === "Administração" && !isAdmin) {
+            return null
+          }
+          return (
+            <SidebarGroup key={section.label}>
+              <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
+              <SidebarMenu>
+                {section.items.map((item) => {
+                  const active =
+                    item.href === "/dashboard"
+                      ? pathname === "/dashboard"
+                      : pathname.startsWith(item.href)
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        isActive={active}
+                        tooltip={item.title}
+                        render={<Link href={item.href} />}
+                      >
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                      {item.badge && (
+                        <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>
+                      )}
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            </SidebarGroup>
+          )
+        })}
       </SidebarContent>
 
       <SidebarFooter className="gap-4 pb-4">
@@ -136,7 +149,10 @@ export function AppSidebar() {
         <Button 
           variant="outline" 
           className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={() => router.push("/login")}
+          onClick={() => {
+            localStorage.removeItem("user_email")
+            router.push("/login")
+          }}
         >
           <LogOut className="mr-2 h-4 w-4" />
           Sair

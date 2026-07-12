@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Bell, LogOut, Search, Settings, UserCircle, Coins } from "lucide-react"
@@ -25,6 +26,20 @@ export function DashboardHeader() {
   const pathname = usePathname()
   const router = useRouter()
   const title = pageTitles[pathname] ?? "Dashboard"
+  const [userEmail, setUserEmail] = React.useState(currentUser.email)
+  const [userName, setUserName] = React.useState(currentUser.name)
+
+  React.useEffect(() => {
+    const email = localStorage.getItem("user_email")
+    if (email) {
+      setUserEmail(email)
+      if (email === "gsntech.suporte@gmail.com") {
+        setUserName("GSN Tech (Super Admin)")
+      } else {
+        setUserName(email.split("@")[0])
+      }
+    }
+  }, [])
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md">
@@ -107,9 +122,9 @@ export function DashboardHeader() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium">{currentUser.name}</span>
+              <span className="text-sm font-medium">{userName}</span>
               <span className="text-xs font-normal text-muted-foreground">
-                {currentUser.email}
+                {userEmail}
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -126,7 +141,10 @@ export function DashboardHeader() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
-              onClick={() => router.push("/login")}
+              onClick={() => {
+                localStorage.removeItem("user_email")
+                router.push("/login")
+              }}
             >
               <LogOut data-icon="inline-start" />
               Sair

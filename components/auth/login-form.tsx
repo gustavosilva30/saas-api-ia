@@ -27,9 +27,22 @@ export function LoginForm() {
     e.preventDefault()
     setLoading(true)
     const data = new FormData(e.currentTarget)
+    const email = String(data.get("email")).trim()
+    const password = String(data.get("password"))
+
+    // Validação específica para o Super Admin
+    if (email === "gsntech.suporte@gmail.com") {
+      if (password !== "Ddos810256@") {
+        toast.error("Senha incorreta para o Super Admin.")
+        setLoading(false)
+        return
+      }
+    }
+
     try {
-      await api.login(String(data.get("email")), String(data.get("password")))
-      toast.success("Bem-vinda de volta!")
+      await api.login(email, password)
+      localStorage.setItem("user_email", email)
+      toast.success("Bem-vindo de volta!")
       router.push("/dashboard")
     } catch {
       toast.error("Não foi possível entrar. Tente novamente.")
