@@ -3,18 +3,27 @@ import io
 import jwt
 import bcrypt
 import psycopg2
+from psycopg2 import pool
 import requests
 import secrets
 import hashlib
+import socket
+import ipaddress
+import hmac
+import re
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Depends
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from rembg import remove, new_session
-from PIL import Image
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="API de Remoção de Fundo de Imagem",
@@ -22,20 +31,49 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Permitir requisições do frontend Next.js ou de qualquer origem (SaaS)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "")
+origins_list = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins_list if origins_list else ["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-jwt-key-92841")
+JWT_SECRET = os.getenv("JWT_SECRET")
+
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET não configurado")
+
 JWT_ALGORITHM = "HS256"
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 RESEND_FROM_EMAIL = os.getenv("EMAIL_FROM") or os.getenv("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
+
+# Database Connection Pool
+db_pool = None
+
+class DBConnectionWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+    def cursor(self, *args, **kwargs):
+        return self.conn.cursor(*args, **kwargs)
+    def commit(self):
+        self.conn.commit()
+    def close(self):
+        global db_pool
+        if db_pool:
+            db_pool.putconn(self.conn)
+
+def get_db_connection():
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return DBConnectionWrapper(db_pool.getconn())
 
 def send_confirmation_email(to_email: str, user_name: str, token: str):
     if not RESEND_API_KEY:
@@ -48,7 +86,6 @@ def send_confirmation_email(to_email: str, user_name: str, token: str):
         "Content-Type": "application/json"
     }
     
-    # Link apontando para a rota de verificação no Next.js
     verification_link = f"https://saas-api-ia.gustavosilva.com.br/verify-email?token={token}"
     
     html_content = f"""
@@ -63,17 +100,6 @@ def send_confirmation_email(to_email: str, user_name: str, token: str):
                 Confirmar E-mail & Ativar Conta
             </a>
         </div>
-        <p style="color: #64748b; font-size: 14px;">
-            Ou copie e cole este link no seu navegador: <br/>
-            <a href="{verification_link}" style="color: #10b981;">{verification_link}</a>
-        </p>
-        <p style="color: #64748b; font-size: 14px; margin-top: 15px;">
-            Este link é válido por 24 horas.
-        </p>
-        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-bottom: 0;">
-            Se você não se cadastrou nesta plataforma, ignore este e-mail.
-        </p>
     </div>
     """
     
@@ -93,7 +119,6 @@ def send_confirmation_email(to_email: str, user_name: str, token: str):
     except Exception as e:
         print(f"Erro de conexão ao enviar e-mail: {e}")
 
-# Cache de sessões para não recarregar os modelos a cada requisição
 sessions = {}
 
 def get_session(model_name: str):
@@ -101,19 +126,17 @@ def get_session(model_name: str):
         sessions[model_name] = new_session(model_name)
     return sessions[model_name]
 
-def get_db_connection():
-    return psycopg2.connect(DATABASE_URL)
-
 @app.on_event("startup")
 def startup_db_setup():
+    global db_pool
     if not DATABASE_URL:
         print("DATABASE_URL não configurada. Pulando setup do banco.")
         return
     try:
+        db_pool = psycopg2.pool.ThreadedConnectionPool(1, 20, DATABASE_URL)
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # 0. Garantir a criação da tabela webhooks se não existir
         cur.execute("""
             CREATE TABLE IF NOT EXISTS webhooks (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -126,7 +149,6 @@ def startup_db_setup():
         """)
         conn.commit()
 
-        # 1. Garantir que a organização do Super Admin existe
         cur.execute("SELECT id FROM organizations WHERE name = 'GSN Tech' LIMIT 1;")
         org = cur.fetchone()
         if not org:
@@ -138,11 +160,18 @@ def startup_db_setup():
         else:
             org_id = org[0]
             
-        # 2. Garantir que o Super Admin existe
         cur.execute("SELECT id FROM users WHERE email = 'gsntech.suporte@gmail.com' LIMIT 1;")
         user = cur.fetchone()
         if not user:
-            password = "Ddos810256@"
+            password = os.getenv("SUPERADMIN_SEED_PASSWORD")
+            
+            if not password:
+                password = secrets.token_urlsafe(20)
+                print("================================================================")
+                print("⚠ ATENÇÃO: A variável SUPERADMIN_SEED_PASSWORD não foi definida.")
+                print(f"Uma senha segura foi gerada automaticamente: {password}")
+                print("================================================================")
+                
             hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             
             cur.execute(
@@ -150,21 +179,21 @@ def startup_db_setup():
                 (org_id, "GSN Tech Support", "gsntech.suporte@gmail.com", hashed_password, "superadmin", "active")
             )
             conn.commit()
-            print("Super Admin seed concluído com sucesso!")
-        else:
-            print("Super Admin já existe no banco.")
-            
         cur.close()
         conn.close()
     except Exception as e:
         print(f"Erro ao inicializar banco de dados / seeding: {e}")
 
-# Autenticação dupla: JWT do Painel ou API Key
+@app.on_event("shutdown")
+def shutdown_db():
+    global db_pool
+    if db_pool:
+        db_pool.closeall()
+
 security = HTTPBearer()
 
 def get_current_org_id(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
-    # Se for uma API Key
     if token.startswith("sk_live_"):
         key_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
         conn = get_db_connection()
@@ -176,14 +205,12 @@ def get_current_org_id(credentials: HTTPAuthorizationCredentials = Depends(secur
             conn.close()
             raise HTTPException(status_code=401, detail="API Key inválida.")
         
-        # Atualizar last_used_at
         cur.execute("UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = %s;", (res[1],))
         conn.commit()
         cur.close()
         conn.close()
         return str(res[0])
     
-    # Se for um JWT do Dashboard
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         if payload.get("type") == "verify_email":
@@ -195,43 +222,54 @@ def get_current_org_id(credentials: HTTPAuthorizationCredentials = Depends(secur
         raise HTTPException(status_code=401, detail="Token inválido.")
 
 
-# Pydantic Schemas para Validação
 class RegisterPayload(BaseModel):
     name: str
     email: EmailStr
     password: str
     company: str
 
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 12:
+            raise ValueError('A senha deve ter no mínimo 12 caracteres.')
+        if not re.search(r"[A-Z]", v):
+            raise ValueError('A senha deve ter pelo menos uma letra maiúscula.')
+        if not re.search(r"[a-z]", v):
+            raise ValueError('A senha deve ter pelo menos uma letra minúscula.')
+        if not re.search(r"[0-9]", v):
+            raise ValueError('A senha deve ter pelo menos um número.')
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
+            raise ValueError('A senha deve ter pelo menos um caractere especial.')
+        return v
+
 class LoginPayload(BaseModel):
     email: EmailStr
     password: str
 
 @app.post("/auth/register")
-def register_user(payload: RegisterPayload):
+@limiter.limit("3/minute")
+def register_user(request: Request, payload: RegisterPayload):
     if not DATABASE_URL:
-        raise HTTPException(status_code=500, detail="Banco de dados não configurado no backend.")
+        raise HTTPException(status_code=500, detail="Banco de dados não configurado.")
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Verificar se email já existe
         cur.execute("SELECT id FROM users WHERE email = %s LIMIT 1;", (payload.email,))
         if cur.fetchone():
             cur.close()
             conn.close()
             raise HTTPException(status_code=400, detail="E-mail já cadastrado.")
             
-        # Criar a organização
         cur.execute(
             "INSERT INTO organizations (name, plan, status) VALUES (%s, 'basic', 'active') RETURNING id;",
             (payload.company,)
         )
         org_id = cur.fetchone()[0]
         
-        # Criptografar a senha
         hashed_password = bcrypt.hashpw(payload.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         
-        # Criar o usuário pendente (requer verificação de e-mail)
         cur.execute(
             "INSERT INTO users (organization_id, name, email, password_hash, role, status) VALUES (%s, %s, %s, %s, 'owner', 'pending') RETURNING id;",
             (org_id, payload.name, payload.email, hashed_password)
@@ -242,14 +280,12 @@ def register_user(payload: RegisterPayload):
         cur.close()
         conn.close()
         
-        # Gerar o token de verificação (expira em 24 horas)
         verify_token = jwt.encode({
             "sub": str(user_id),
             "type": "verify_email",
             "exp": datetime.utcnow() + timedelta(hours=24)
         }, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-        # Enviar o e-mail de confirmação via Resend contendo o link do token
         send_confirmation_email(payload.email, payload.name, verify_token)
         
         return {
@@ -262,9 +298,10 @@ def register_user(payload: RegisterPayload):
         raise HTTPException(status_code=500, detail=f"Erro no cadastro: {str(e)}")
 
 @app.post("/auth/login")
-def login_user(payload: LoginPayload):
+@limiter.limit("5/minute")
+def login_user(request: Request, payload: LoginPayload):
     if not DATABASE_URL:
-        raise HTTPException(status_code=500, detail="Banco de dados não configurado no backend.")
+        raise HTTPException(status_code=500, detail="Banco de dados não configurado.")
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -285,13 +322,11 @@ def login_user(payload: LoginPayload):
             conn.close()
             raise HTTPException(status_code=401, detail="E-mail ou senha incorretos.")
             
-        # Verificar se e-mail está confirmado
         if user['status'] == 'pending':
             cur.close()
             conn.close()
-            raise HTTPException(status_code=403, detail="Por favor, confirme seu e-mail para ativar sua conta e liberar o acesso.")
+            raise HTTPException(status_code=403, detail="Por favor, confirme seu e-mail para ativar sua conta.")
             
-        # Comparar senha com bcrypt
         if not bcrypt.checkpw(payload.password.encode('utf-8'), user['password_hash'].encode('utf-8')):
             cur.close()
             conn.close()
@@ -322,14 +357,11 @@ def login_user(payload: LoginPayload):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro no login: {str(e)}")
 
-# Novo Schema e Endpoint para confirmação de e-mail
 class VerifyPayload(BaseModel):
     token: str
 
 @app.post("/auth/verify-email")
 def verify_email(payload: VerifyPayload):
-    if not DATABASE_URL:
-        raise HTTPException(status_code=500, detail="Banco de dados não configurado.")
     try:
         data = jwt.decode(payload.token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         if data.get("type") != "verify_email":
@@ -339,7 +371,6 @@ def verify_email(payload: VerifyPayload):
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Verificar se usuário existe e está pendente
         cur.execute("SELECT status FROM users WHERE id = %s LIMIT 1;", (user_id,))
         user = cur.fetchone()
         if not user:
@@ -352,7 +383,6 @@ def verify_email(payload: VerifyPayload):
             conn.close()
             return {"message": "E-mail já verificado anteriormente!"}
             
-        # Atualizar status para active
         cur.execute("UPDATE users SET status = 'active' WHERE id = %s;", (user_id,))
         conn.commit()
         cur.close()
@@ -368,12 +398,55 @@ def verify_email(payload: VerifyPayload):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao verificar e-mail: {str(e)}")
 
+@app.get("/health")
+def healthcheck():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT 1;")
+        cur.close()
+        conn.close()
+        return {"status": "ok", "database": "connected"}
+    except Exception as e:
+        return {"status": "error", "database": str(e)}
+
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "API de Remoção de Fundo funcionando com sucesso."}
 
+def dispatch_webhooks(org_id: str, tier: str):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT url, secret FROM webhooks WHERE organization_id = %s AND is_active = TRUE;", (org_id,))
+        hooks = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        import json
+        payload = {"event": "image.processed", "status": "success", "tier": tier}
+        payload_json = json.dumps(payload).encode('utf-8')
+        
+        for h in hooks:
+            url = h[0]
+            secret = h[1]
+            signature = hmac.new(secret.encode('utf-8'), payload_json, hashlib.sha256).hexdigest()
+            headers = {
+                "Content-Type": "application/json",
+                "X-Webhook-Signature": signature
+            }
+            try:
+                requests.post(url, data=payload_json, headers=headers, timeout=5)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 @app.post("/remove-bg")
+@limiter.limit("20/minute")
 async def remove_background(
+    request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
     tier: str = Form("basic"), 
     org_id: str = Depends(get_current_org_id)
@@ -411,29 +484,13 @@ async def remove_background(
                 session=session
             )
         
-        # Disparar webhooks de sucesso de forma assíncrona (na prática deveria usar BackgroundTasks)
-        # Aqui fazemos de forma simples e direta para o teste
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute("SELECT url FROM webhooks WHERE organization_id = %s AND is_active = TRUE;", (org_id,))
-            hooks = cur.fetchall()
-            cur.close()
-            conn.close()
-            for h in hooks:
-                try:
-                    requests.post(h[0], json={"event": "image.processed", "status": "success", "tier": tier}, timeout=2)
-                except:
-                    pass
-        except:
-            pass
+        background_tasks.add_task(dispatch_webhooks, org_id, tier)
 
         return StreamingResponse(io.BytesIO(output_image_bytes), media_type="image/png")
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao processar imagem: {str(e)}")
 
-# API Keys Endpoints
 class CreateApiKeyPayload(BaseModel):
     name: str
 
@@ -482,7 +539,23 @@ def delete_api_key(key_id: str, org_id: str = Depends(get_current_org_id)):
     conn.close()
     return {"message": "API Key revogada."}
 
-# Webhooks Endpoints
+def is_valid_webhook_url(url: str) -> bool:
+    if not url.startswith("https://"):
+        return False
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        ip = socket.gethostbyname(hostname)
+        ip_obj = ipaddress.ip_address(ip)
+        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+            return False
+        return True
+    except Exception:
+        return False
+
 class CreateWebhookPayload(BaseModel):
     url: str
 
@@ -498,6 +571,9 @@ def get_webhooks(org_id: str = Depends(get_current_org_id)):
 
 @app.post("/webhooks")
 def create_webhook(payload: CreateWebhookPayload, org_id: str = Depends(get_current_org_id)):
+    if not is_valid_webhook_url(payload.url):
+        raise HTTPException(status_code=400, detail="URL inválida ou não permitida (SSRF protection).")
+        
     secret = "whsec_" + secrets.token_hex(16)
     conn = get_db_connection()
     cur = conn.cursor()
