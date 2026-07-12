@@ -1,15 +1,22 @@
 import React from "react"
-import { Undo, Redo, Download, Play, Image as ImageIcon } from "lucide-react"
+import { Undo, Redo, Download, Play, ChevronLeft, Image as ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 export function StudioTopbar() {
   return (
     <div className="h-14 border-b bg-background flex items-center justify-between px-4 shrink-0 z-10">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon">
-          <ImageIcon className="h-5 w-5" />
-        </Button>
-        <span className="font-semibold text-sm">AI Studio</span>
+      <div className="flex items-center gap-4">
+        <Link href="/dashboard">
+          <Button variant="ghost" size="icon" title="Voltar ao Dashboard">
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div className="h-6 w-px bg-border"></div>
+        <div className="flex items-center gap-2">
+          <ImageIcon className="h-5 w-5 text-primary" />
+          <span className="font-semibold text-sm">AI Studio</span>
+        </div>
       </div>
       
       <div className="flex items-center gap-2">
