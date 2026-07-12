@@ -4,11 +4,9 @@ import { Play, Pause, SkipBack, Scissors, Clock, Settings2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { useTimelineStore } from "@/store/useTimelineStore"
-import { useProjectStore } from "@/store/useProjectStore"
 
 export function TimelinePlugin() {
   const { currentTime, duration, isPlaying, play, pause, seek } = useTimelineStore();
-  const { currentProject } = useProjectStore();
   const timelineRef = useRef<HTMLDivElement>(null);
 
   // Formata ms em "00:00:00" (min:sec:frames/ms)
