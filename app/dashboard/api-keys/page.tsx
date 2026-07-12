@@ -9,9 +9,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Loader2, Plus, Copy, Trash, Key, Check } from "lucide-react"
 import { api } from "@/lib/api"
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
 import { toast } from "sonner"
+
+const formatDate = (dateString: string) => {
+  if (!dateString) return ""
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(dateString))
+}
+
+const formatDateTime = (dateString: string) => {
+  if (!dateString) return ""
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(dateString))
+}
 
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<any[]>([])
@@ -177,10 +185,10 @@ export default function ApiKeysPage() {
                     <TableRow key={key.id}>
                       <TableCell className="font-medium">{key.name}</TableCell>
                       <TableCell><code className="bg-muted px-1.5 py-0.5 rounded text-sm">{key.prefix}</code></TableCell>
-                      <TableCell>{format(new Date(key.created_at), "dd 'de' MMM, yyyy", { locale: ptBR })}</TableCell>
+                      <TableCell>{formatDate(key.created_at)}</TableCell>
                       <TableCell>
                         {key.last_used_at 
-                          ? format(new Date(key.last_used_at), "dd/MM/yyyy HH:mm") 
+                          ? formatDateTime(key.last_used_at) 
                           : "Nunca usada"}
                       </TableCell>
                       <TableCell className="text-right">

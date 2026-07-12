@@ -10,9 +10,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Plus, Trash, Globe } from "lucide-react"
 import { api } from "@/lib/api"
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
 import { toast } from "sonner"
+
+const formatDate = (dateString: string) => {
+  if (!dateString) return ""
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(dateString))
+}
 
 export default function WebhooksPage() {
   const [hooks, setHooks] = useState<any[]>([])
@@ -151,7 +154,7 @@ export default function WebhooksPage() {
                           <Badge variant="secondary">Desativado</Badge>
                         )}
                       </TableCell>
-                      <TableCell>{format(new Date(hook.created_at), "dd 'de' MMM, yyyy", { locale: ptBR })}</TableCell>
+                      <TableCell>{formatDate(hook.created_at)}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleDelete(hook.id)}>
                           <Trash className="h-4 w-4 text-red-500" />
