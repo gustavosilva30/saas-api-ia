@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Coins, History, Zap } from "lucide-react"
+import { useBillingStore } from "@/store/useBillingStore"
 
 export default function CreditsPage() {
-  const totalCredits = 0;
-  const usedCredits = 0;
+  const { totalCredits, usedCredits, costLogs } = useBillingStore();
   const percentage = totalCredits > 0 ? (usedCredits / totalCredits) * 100 : 0;
   
   return (
@@ -81,9 +81,26 @@ export default function CreditsPage() {
       </h3>
       
       <Card>
-        <div className="p-8 text-center text-muted-foreground">
-          <p>Nenhuma transação recente encontrada.</p>
-        </div>
+        {costLogs.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground">
+            <p>Nenhuma transação recente encontrada.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {costLogs.map((log) => (
+              <div key={log.id} className="flex justify-between items-center p-4">
+                <div>
+                  <p className="font-medium">Processamento IA ({log.model})</p>
+                  <p className="text-sm text-muted-foreground">{new Date(log.timestamp).toLocaleString()}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-destructive">-{log.creditsUsed} créditos</p>
+                  <p className="text-xs text-muted-foreground">${log.costUsd.toFixed(4)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   )

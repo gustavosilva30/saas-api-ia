@@ -5,8 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { CreditCard, CheckCircle2, FileText, AlertCircle } from "lucide-react"
+import { useBillingStore, PLANS } from "@/store/useBillingStore"
 
 export default function BillingPage() {
+  const { currentPlanId } = useBillingStore()
+  const plan = PLANS[currentPlanId] || PLANS.free
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -20,23 +24,22 @@ export default function BillingPage() {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Plano Atual</CardTitle>
-              <Badge variant="secondary">Gratuito</Badge>
+              <Badge variant="secondary">{plan.name}</Badge>
             </div>
-            <CardDescription>Você está atualmente no plano gratuito.</CardDescription>
+            <CardDescription>Você está atualmente no {plan.name.toLowerCase()}.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <p className="text-3xl font-bold">Plano Basic</p>
-              <p className="text-sm text-muted-foreground mt-1">R$ 0,00 / mês</p>
+              <p className="text-3xl font-bold">{plan.name}</p>
+              <p className="text-sm text-muted-foreground mt-1">R$ {plan.price.toFixed(2)} / mês</p>
             </div>
             
             <ul className="space-y-2 text-sm text-muted-foreground mt-4">
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-muted-foreground" /> Acesso ao modelo u2netp (Padrão)
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-muted-foreground" /> Suporte comunitário
-              </li>
+              {plan.features.map((feature, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-muted-foreground" /> {feature}
+                </li>
+              ))}
             </ul>
           </CardContent>
           <CardFooter className="flex gap-4 border-t border-border/50 pt-6">

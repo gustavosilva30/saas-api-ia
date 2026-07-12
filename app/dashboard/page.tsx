@@ -7,10 +7,15 @@ import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Coins, Clock, TrendingUp } from "lucide-react"
+import { useAnalyticsStore } from "@/store/useAnalyticsStore"
+import { useBillingStore } from "@/store/useBillingStore"
 
 export default function DashboardPage() {
   const [userName, setUserName] = React.useState("Usuário")
   const [companyName, setCompanyName] = React.useState("sua empresa")
+
+  const { imagesToday, imagesThisMonth, getAverageTime } = useAnalyticsStore()
+  const { getAvailableCredits } = useBillingStore()
 
   React.useEffect(() => {
     const email = localStorage.getItem("user_email")
@@ -51,8 +56,8 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <span className="text-2xl font-semibold tabular-nums tracking-tight">0</span>
-            <p className="text-xs text-muted-foreground mt-1">Nenhuma imagem hoje</p>
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">{imagesToday}</span>
+            <p className="text-xs text-muted-foreground mt-1">Imagens processadas hoje</p>
           </CardContent>
         </Card>
         
@@ -64,8 +69,8 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <span className="text-2xl font-semibold tabular-nums tracking-tight">0</span>
-            <p className="text-xs text-muted-foreground mt-1">Nenhum processamento</p>
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">{imagesThisMonth}</span>
+            <p className="text-xs text-muted-foreground mt-1">Imagens processadas no mês</p>
           </CardContent>
         </Card>
 
@@ -77,8 +82,8 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <span className="text-2xl font-semibold tabular-nums tracking-tight">0</span>
-            <p className="text-xs text-muted-foreground mt-1">Adicione créditos para usar a API</p>
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">{getAvailableCredits()}</span>
+            <p className="text-xs text-muted-foreground mt-1">Saldo atual da conta</p>
           </CardContent>
         </Card>
 
@@ -90,8 +95,8 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <span className="text-2xl font-semibold tabular-nums tracking-tight">0.0s</span>
-            <p className="text-xs text-muted-foreground mt-1">Sem requisições</p>
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">{(getAverageTime() / 1000).toFixed(1)}s</span>
+            <p className="text-xs text-muted-foreground mt-1">Tempo médio de resposta</p>
           </CardContent>
         </Card>
       </div>

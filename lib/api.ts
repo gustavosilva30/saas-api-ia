@@ -13,6 +13,8 @@
  */
 import * as mock from "./mock-data"
 import type { ApiKey, ProcessedImage } from "./types"
+import { useBillingStore } from "../store/useBillingStore"
+import { useAnalyticsStore } from "../store/useAnalyticsStore"
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
@@ -79,6 +81,16 @@ export const api = {
     return mock.recentImages
   },
   async removeBackground(file: File): Promise<ProcessedImage> {
+    const billingStore = useBillingStore.getState();
+    const analyticsStore = useAnalyticsStore.getState();
+    
+    // Check credits before request
+    const creditsNeeded = 1;
+    if (billingStore.totalCredits - billingStore.usedCredits < creditsNeeded) {
+      throw new Error("Créditos insuficientes. Por favor, recarregue sua conta.");
+    }
+
+    const startTime = Date.now();
     const formData = new FormData()
     formData.append("image", file)
 
@@ -101,6 +113,13 @@ export const api = {
 
     const data = await response.json()
     const resultUrl = data.imageUrl || data.image_url
+    
+    const durationMs = Date.now() - startTime;
+    const jobId = `job_${Date.now()}`;
+    
+    // Log Cost Engine and Analytics
+    billingStore.consumeCredits(creditsNeeded, "u2netp", jobId);
+    analyticsStore.logProcessing(durationMs);
 
     return {
       id: `img_${Date.now()}`,
@@ -111,7 +130,7 @@ export const api = {
       format: "PNG",
       resolution: "Auto",
       sizeKb: 150,
-      durationMs: 2000,
+      durationMs: durationMs,
       createdAt: new Date().toISOString(),
     }
   },
