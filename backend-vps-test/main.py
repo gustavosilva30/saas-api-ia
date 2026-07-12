@@ -846,7 +846,8 @@ async def create_job(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
     tier: str = Form("basic"), 
-    org_id: str = Depends(get_current_org_id)
+    org_id: str = Depends(get_current_org_id),
+    role: str = Depends(get_current_role)
 ):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
@@ -871,8 +872,9 @@ async def create_job(
         if tier == "premium" and plan != "premium":
             raise HTTPException(status_code=403, detail="O Tier Premium exige plano Premium.")
             
-        if balance < cost:
-            raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
+        if role != "superadmin":
+            if balance < cost:
+                raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
             
         input_image_bytes = await file.read()
         
@@ -880,17 +882,21 @@ async def create_job(
         if len(input_image_bytes) > 20 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="O arquivo excede o limite de 20MB.")
         
-        new_balance = balance - cost
-        cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        if role != "superadmin":
+            new_balance = balance - cost
+            cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        else:
+            new_balance = balance
         
         # Insert Job
         cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'bg-removal') RETURNING id;", (org_id, tier))
         job_id = str(cur.fetchone()['id'])
         
-        cur.execute(
-            "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
-            (org_id, -cost, f"job bg-removal ({tier})", job_id, new_balance)
-        )
+        if role != "superadmin":
+            cur.execute(
+                "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
+                (org_id, -cost, f"job bg-removal ({tier})", job_id, new_balance)
+            )
         
         conn.commit()
         cur.close()

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useMarketplaceStore, HubItem, HubItemType } from "@/store/useMarketplaceStore"
 import { useBillingStore } from "@/store/useBillingStore"
 import { toast } from "sonner"
@@ -24,12 +25,31 @@ export default function AIStudioHubPage() {
 
   const [activeTab, setActiveTab] = useState<"discover" | HubItemType | "inventory">("discover");
   const [search, setSearch] = useState("");
+  
+  // UI States for professional purchasing
+  const [selectedItem, setSelectedItem] = useState<HubItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
 
-  const handlePurchase = (item: HubItem) => {
-    // Na vida real, abriria um Dialog de confirmação
-    if (confirm(`Deseja investir ${item.price.toLocaleString()} créditos em '${item.title}'?`)) {
-      purchaseItem(item.id);
+  const handlePurchaseClick = (item: HubItem) => {
+    setSelectedItem(item);
+    setIsModalOpen(true);
+  };
+
+  const confirmPurchase = async () => {
+    if (!selectedItem) return;
+    
+    setIsPurchasing(true);
+    // Simulate network delay for professional feel
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    const success = purchaseItem(selectedItem.id);
+    if (success) {
+      toast.success(`${selectedItem.title} adquirido com sucesso!`);
     }
+    
+    setIsPurchasing(false);
+    setIsModalOpen(false);
   };
 
   const filteredItems = items.filter(item => {
@@ -161,7 +181,7 @@ export default function AIStudioHubPage() {
                       <Button 
                         variant="default" 
                         className="w-full h-12 rounded-none gap-2 font-bold"
-                        onClick={() => handlePurchase(item)}
+                        onClick={() => handlePurchaseClick(item)}
                       >
                         Adquirir por {item.price.toLocaleString()} Cr
                         <ChevronRight className="size-4 opacity-50" />
@@ -175,6 +195,71 @@ export default function AIStudioHubPage() {
         )}
       </div>
       
+      {/* Professional Purchase Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingBag className="size-5 text-primary" />
+              Confirmar Aquisição
+            </DialogTitle>
+            <DialogDescription>
+              Você está prestes a adquirir um novo recurso para o seu Studio.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedItem && (
+            <div className="py-4 flex flex-col gap-4">
+              <div className="flex gap-4 items-center bg-muted/30 p-3 rounded-lg border">
+                <img src={selectedItem.thumbnail} alt={selectedItem.title} className="w-16 h-16 rounded-md object-cover shadow-sm" />
+                <div className="flex-1">
+                  <h4 className="font-semibold leading-none mb-1.5">{selectedItem.title}</h4>
+                  <Badge variant="secondary" className="text-[10px] uppercase">{TYPE_LABELS[selectedItem.type]}</Badge>
+                </div>
+              </div>
+              
+              <div className="flex justify-between items-center px-2">
+                <span className="text-sm text-muted-foreground">Valor do item:</span>
+                <span className="font-mono font-bold text-lg">{selectedItem.price.toLocaleString()} Cr</span>
+              </div>
+              
+              <div className="flex justify-between items-center px-2">
+                <span className="text-sm text-muted-foreground">Seu saldo atual:</span>
+                <span className="font-mono font-semibold">{balance.toLocaleString()} Cr</span>
+              </div>
+              
+              <div className="h-px bg-border my-1" />
+              
+              <div className="flex justify-between items-center px-2">
+                <span className="text-sm font-medium">Saldo final:</span>
+                <span className={cn("font-mono font-bold", balance - selectedItem.price < 0 ? "text-destructive" : "text-green-500")}>
+                  {(balance - selectedItem.price).toLocaleString()} Cr
+                </span>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="flex-col sm:flex-row gap-2 mt-2">
+            <Button variant="outline" onClick={() => setIsModalOpen(false)} disabled={isPurchasing} className="w-full sm:w-auto">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={confirmPurchase} 
+              disabled={isPurchasing || (selectedItem ? balance < selectedItem.price : true)}
+              className="w-full sm:w-auto gap-2"
+            >
+              {isPurchasing ? (
+                <>
+                  <div className="size-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>Confirmar Compra</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
