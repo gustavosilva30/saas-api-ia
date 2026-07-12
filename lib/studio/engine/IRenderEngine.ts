@@ -61,6 +61,17 @@ export interface IRenderEngine {
    */
   removeObject(id: string): void;
 
+  /**
+   * Atualiza propriedades numéricas/visuais de um objeto (usado pelo Motion Engine).
+   */
+  updateObjectProperties(id: string, properties: any): void;
+
+  /**
+   * Retorna as propriedades atuais de um objeto para calcular deltas.
+   */
+  getObjectProperties(id: string): any;
+
+  /**
    * Retorna um objeto JSON contendo os parâmetros de sombra aplicados ao objeto selecionado.
    */
   getSelectedObjectShadow(): any;

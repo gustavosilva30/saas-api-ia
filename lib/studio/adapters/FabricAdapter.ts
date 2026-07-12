@@ -191,6 +191,34 @@ export class FabricAdapter implements IRenderEngine {
     }
   }
 
+  updateObjectProperties(id: string, properties: any): void {
+    if (!this.canvas) return;
+    const objects = this.canvas.getObjects() as any[];
+    const target = objects.find(o => o.id === id);
+    if (target) {
+      target.set(properties);
+      // Não chamamos requestRenderAll aqui para otimização, 
+      // o MotionEngine chama em lote após atualizar todos.
+    }
+  }
+
+  getObjectProperties(id: string): any {
+    if (!this.canvas) return null;
+    const objects = this.canvas.getObjects() as any[];
+    const target = objects.find(o => o.id === id);
+    if (target) {
+      return {
+        opacity: target.opacity ?? 1,
+        left: target.left ?? 0,
+        top: target.top ?? 0,
+        scaleX: target.scaleX ?? 1,
+        scaleY: target.scaleY ?? 1,
+        angle: target.angle ?? 0
+      };
+    }
+    return null;
+  }
+
   getSelectedObjectShadow(): any {
     if (!this.canvas) return null;
     const activeObject = this.canvas.getActiveObject();

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react"
 import { FabricAdapter } from "@/lib/studio/adapters/FabricAdapter"
+import { MotionEngine } from "@/lib/studio/engine/MotionEngine"
 import { useStudioStore } from "@/store/useStudioStore"
 import { Loader2 } from "lucide-react"
 
@@ -26,6 +27,10 @@ export function StudioCanvasArea() {
     adapterRef.current = adapter
     setEngine(adapter)
 
+    // Acopla o MotionEngine
+    const motion = MotionEngine.getInstance()
+    motion.attachRenderEngine(adapter)
+
     // Handle Window Resize
     const handleResize = () => {
       if (containerRef.current && adapterRef.current) {
@@ -40,6 +45,7 @@ export function StudioCanvasArea() {
 
     return () => {
       window.removeEventListener("resize", handleResize)
+      motion.detachRenderEngine()
       if (adapterRef.current) {
         adapterRef.current.destroy()
       }
