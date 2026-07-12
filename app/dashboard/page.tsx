@@ -36,7 +36,7 @@ export default function DashboardPage() {
         title={`Bem-vindo, ${userName}`}
         description={`Aqui está o resumo da atividade de ${companyName}.`}
       >
-        <Button variant="outline" render={<Link href="/dashboard/batch" />} disabled>
+        <Button variant="outline" render={<Link href="/dashboard/batch" />}>
           <Layers data-icon="inline-start" />
           Lote
         </Button>

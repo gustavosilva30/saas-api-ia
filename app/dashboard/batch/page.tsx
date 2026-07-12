@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Upload, ImageIcon, Download, RefreshCw, Trash2, CheckCircle2, AlertCircle, Eye, SlidersHorizontal } from "lucide-react"
+import { Upload, ImageIcon, Download, RefreshCw, Trash2, CheckCircle2, AlertCircle, Eye, SlidersHorizontal, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { Card, CardContent } from "@/components/ui/card"
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { api } from "@/lib/api"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { useJobStore, Job } from "@/store/useJobStore"
 
 type BgColor = "transparent" | "white" | "black" | "gray"
 
@@ -22,8 +23,9 @@ interface BatchItem {
 }
 
 export default function BatchPage() {
-  const [items, setItems] = useState<BatchItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const { jobs, addJob, removeJob, clearCompleted, getJobsArray, isProcessing } = useJobStore();
+  const items = getJobsArray();
+  
   const [isDragging, setIsDragging] = useState(false)
   const [bgColor, setBgColor] = useState<BgColor>("transparent")
   
@@ -39,22 +41,18 @@ export default function BatchPage() {
   }
 
   const addFiles = (files: File[]) => {
-    const newItems: BatchItem[] = files
-      .filter((file) => file.type.startsWith("image/"))
-      .map((file) => ({
-        id: `batch_${Math.random().toString(36).slice(2, 9)}`,
-        file,
-        originalUrl: URL.createObjectURL(file),
-        resultUrl: null,
-        status: "idle",
-      }))
+    const validFiles = files.filter((file) => file.type.startsWith("image/"));
     
-    if (newItems.length === 0) {
+    if (validFiles.length === 0) {
       toast.error("Nenhuma imagem válida foi selecionada.")
       return
     }
 
-    setItems((prev) => [...prev, ...newItems])
+    validFiles.forEach((file) => {
+      addJob(file, "bg-removal");
+    });
+    
+    toast.success(`${validFiles.length} imagens adicionadas à fila de processamento!`);
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -75,46 +73,15 @@ export default function BatchPage() {
   }
 
   const removeItem = (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id))
+    removeJob(id)
   }
 
+  // Não precisamos mais do loop bloqueante manual, o JobStore orquestra isso!
   const handleProcessBatch = async () => {
-    const pendingItems = items.filter((item) => item.status !== "done")
-    if (pendingItems.length === 0) return
-
-    setLoading(true)
-    const toastId = toast.loading(`Processando lote de ${pendingItems.length} imagens...`)
-
-    for (const item of pendingItems) {
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, status: "processing" } : i))
-      )
-
-      try {
-        const result = await api.removeBackground(item.file)
-        
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === item.id ? { ...i, status: "done", resultUrl: result.resultUrl } : i
-          )
-        )
-      } catch (err: any) {
-        console.error(err)
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === item.id
-              ? { ...i, status: "failed", error: err.message || "Erro na VPS" }
-              : i
-          )
-        )
-      }
-    }
-
-    toast.success("Processamento em lote concluído!", { id: toastId })
-    setLoading(false)
+    // Processamento agora é automático ao fazer o drop.
   }
 
-  const downloadSingle = (item: BatchItem, selectedBg: BgColor = bgColor) => {
+  const downloadSingle = (item: Job, selectedBg: BgColor = bgColor) => {
     if (!item.resultUrl) return
 
     if (selectedBg === "transparent") {
@@ -155,7 +122,7 @@ export default function BatchPage() {
   }
 
   const downloadAll = () => {
-    const completed = items.filter((item) => item.status === "done")
+    const completed = items.filter((item) => item.status === "completed")
     completed.forEach((item, index) => {
       setTimeout(() => {
         downloadSingle(item)
@@ -164,11 +131,11 @@ export default function BatchPage() {
   }
 
   const handleReset = () => {
-    setItems([])
+    clearCompleted()
     setBgColor("transparent")
   }
 
-  const doneCount = items.filter((i) => i.status === "done").length
+  const doneCount = items.filter((i) => i.status === "completed").length
   const hasItems = items.length > 0
 
   return (
@@ -247,11 +214,11 @@ export default function BatchPage() {
                     key={item.id}
                     className={cn(
                       "flex items-center gap-3 border rounded-lg p-2 bg-card transition-all",
-                      item.status === "done" ? "cursor-pointer hover:border-primary/50 hover:bg-muted/10" : "bg-card"
+                      item.status === "completed" ? "cursor-pointer hover:border-primary/50 hover:bg-muted/10" : "bg-card"
                     )}
                     onClick={() => {
-                      if (item.status === "done") {
-                        setSelectedItem(item)
+                      if (item.status === "completed") {
+                        setSelectedItem(item as any)
                         setPreviewBgColor(bgColor)
                         setSliderPosition(50)
                       }
@@ -260,16 +227,16 @@ export default function BatchPage() {
                     {/* Thumbnail */}
                     <div className="relative size-12 rounded border overflow-hidden bg-checkerboard flex items-center justify-center shrink-0">
                       <img
-                        src={item.resultUrl && item.status === "done" && bgColor !== "transparent" ? item.resultUrl : item.originalUrl}
+                        src={item.resultUrl && item.status === "completed" && bgColor !== "transparent" ? item.resultUrl : item.originalUrl}
                         alt={item.file.name}
                         className={cn(
                           "max-h-full object-contain pointer-events-none",
-                          item.resultUrl && item.status === "done" && bgColor === "white" && "bg-white",
-                          item.resultUrl && item.status === "done" && bgColor === "black" && "bg-black",
-                          item.resultUrl && item.status === "done" && bgColor === "gray" && "bg-gray-500"
+                          item.resultUrl && item.status === "completed" && bgColor === "white" && "bg-white",
+                          item.resultUrl && item.status === "completed" && bgColor === "black" && "bg-black",
+                          item.resultUrl && item.status === "completed" && bgColor === "gray" && "bg-gray-500"
                         )}
                       />
-                      {item.status === "done" && (
+                      {item.status === "completed" && (
                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                           <Eye className="w-5 h-5 text-white" />
                         </div>
@@ -286,14 +253,21 @@ export default function BatchPage() {
 
                     {/* Status/Ações */}
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      {item.status === "processing" && (
+                      {item.status === "running" && (
                         <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
                           <RefreshCw className="size-3.5 animate-spin" />
                           <span>IA Processando...</span>
                         </div>
                       )}
                       
-                      {item.status === "done" && (
+                      {item.status === "pending" && (
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <Clock className="size-3.5" />
+                          <span>Na fila...</span>
+                        </div>
+                      )}
+                      
+                      {item.status === "completed" && (
                         <div className="flex items-center gap-1 text-xs font-medium text-emerald-500">
                           <CheckCircle2 className="size-4" />
                           <span>Pronto</span>
@@ -307,7 +281,7 @@ export default function BatchPage() {
                         </div>
                       )}
 
-                      {item.status === "done" && (
+                      {item.status === "completed" && (
                         <Button size="icon-sm" variant="ghost" onClick={() => downloadSingle(item)}>
                           <Download className="size-4" />
                         </Button>
@@ -318,7 +292,6 @@ export default function BatchPage() {
                         variant="ghost"
                         className="text-muted-foreground hover:text-destructive"
                         onClick={() => removeItem(item.id)}
-                        disabled={loading}
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -331,8 +304,8 @@ export default function BatchPage() {
             {/* Barra de Ações do Lote */}
             {hasItems && (
               <div className="flex flex-col sm:flex-row gap-3 justify-between items-center border-t pt-4">
-                <Button variant="ghost" onClick={handleReset} disabled={loading} className="w-full sm:w-auto">
-                  Limpar Lote
+                <Button variant="ghost" onClick={handleReset} className="w-full sm:w-auto">
+                  Limpar Concluídos
                 </Button>
 
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -343,19 +316,10 @@ export default function BatchPage() {
                     </Button>
                   )}
 
-                  {doneCount < items.length && (
-                    <Button onClick={handleProcessBatch} disabled={loading} className="w-full sm:w-auto">
-                      {loading ? (
-                        <>
-                          <RefreshCw className="mr-2 size-4 animate-spin" />
-                          Processando...
-                        </>
-                      ) : (
-                        <>
-                          <ImageIcon className="mr-2 size-4" />
-                          Processar {items.length - doneCount} Imagens
-                        </>
-                      )}
+                  {items.filter(i => i.status === "pending" || i.status === "running").length > 0 && (
+                    <Button disabled className="w-full sm:w-auto">
+                      <RefreshCw className="mr-2 size-4 animate-spin" />
+                      Processando {items.filter(i => i.status === "pending" || i.status === "running").length}
                     </Button>
                   )}
                 </div>
