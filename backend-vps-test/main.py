@@ -697,15 +697,10 @@ async def remove_background(
             
         # 3. Processar Imagem
         alpha_matting = False
-        model_name = "u2netp"
+        model_name = "birefnet-general"
         
-        if tier == "pro":
-            model_name = "u2net"
-            alpha_matting = True
-        elif tier == "premium":
-            model_name = "isnet-general-use"
-            alpha_matting = True
-            
+        # (Lógica de tier removida para forçar qualidade premium em tudo temporariamente)
+        
         session = get_session(model_name)
         
         async with ai_semaphore:
@@ -717,7 +712,8 @@ async def remove_background(
                     alpha_matting=True,
                     alpha_matting_foreground_threshold=240,
                     alpha_matting_background_threshold=10,
-                    alpha_matting_erode_size=10
+                    alpha_matting_erode_size=10,
+                    post_process_mask=True
                 )
             else:
                 output_image_bytes = await asyncio.to_thread(
@@ -884,11 +880,13 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
                 input_image_bytes = f.read()
                 
             alpha_matting = False
-            model_name = "u2net" # Atualizando o básico para u2net em vez de u2netp
-            if tier == "pro":
-                model_name = "isnet-general-use"
-            elif tier == "premium":
-                model_name = "birefnet-general"
+            # birefnet-general é disparado o melhor modelo de salient object detection disponível no rembg,
+            # não gera os chunks (pedaços de fundo) nas bordas de metais e recorta perfeitamente peças mecânicas.
+            model_name = "birefnet-general"
+            
+            # (Mantendo a lógica de fallback se quisermos separar no futuro)
+            # if tier == "basic": ...
+
                 
             session = get_session(model_name)
             
