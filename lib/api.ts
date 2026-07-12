@@ -175,7 +175,72 @@ export const api = {
     }
   },
 
-  // API
+  // Jobs System (Assíncrono)
+  async createJob(file: File, tier: string = "basic"): Promise<{ job_id: string; status: string }> {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("tier", tier)
+
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`
+    }
+
+    const res = await fetch(`${API_BASE}/jobs`, {
+      method: "POST",
+      headers,
+      body: formData,
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "Erro desconhecido")
+      throw new Error(`Falha ao criar job: ${errorText}`)
+    }
+    return res.json()
+  },
+
+  async getJobStatus(jobId: string): Promise<any> {
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const res = await fetch(`${API_BASE}/jobs/${jobId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) {
+      throw new Error("Erro ao buscar status do Job")
+    }
+    return res.json()
+  },
+
+  // Campaign AI (Assíncrono via Job)
+  async createCampaignAnalyzeJob(file: File): Promise<{ job_id: string; status: string }> {
+    const formData = new FormData()
+    formData.append("file", file)
+
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const res = await fetch(`${API_BASE}/campaigns/analyze`, {
+      method: "POST",
+      headers: token ? { "Authorization": `Bearer ${token}` } : {},
+      body: formData,
+    })
+    if (!res.ok) throw new Error("Falha ao iniciar análise de imagem")
+    return res.json()
+  },
+
+  async createCampaignCopyJob(category: string): Promise<{ job_id: string; status: string }> {
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const res = await fetch(`${API_BASE}/campaigns/generate-copy`, {
+      method: "POST",
+      headers: token ? { 
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      } : { "Content-Type": "application/json" },
+      body: JSON.stringify({ category }),
+    })
+    if (!res.ok) throw new Error("Falha ao iniciar geração de copy")
+    return res.json()
+  },
+
+  // API Keys
   async getApiRequests() {
     await delay(400)
     return mock.apiRequests

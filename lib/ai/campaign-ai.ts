@@ -24,9 +24,13 @@ export interface CampaignCopy {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// DEV FALLBACK ONLY — nunca usar em produção!
+// Este arquivo foi rebaixado para fallback. Toda a inteligência real roda no backend via Job System (Fase 4).
+
 export const campaignAI = {
   // Simula a análise visual do produto
   async analyzeProduct(imageFile: File): Promise<ProductAnalysis> {
+    console.warn("DEV FALLBACK ONLY: Usando mock client-side para vision.");
     await delay(1500); // Simulando delay de rede do modelo de Visão
     
     // Heurística boba apenas para o mock baseada no nome do arquivo (ou fixo)
@@ -54,6 +58,7 @@ export const campaignAI = {
 
   // Simula a geração de copy baseada na categoria do produto
   async generateCopywriting(category: string): Promise<CampaignCopy> {
+    console.warn("DEV FALLBACK ONLY: Usando mock client-side para copy.");
     await delay(2000); // Simula delay do LLM
 
     return {

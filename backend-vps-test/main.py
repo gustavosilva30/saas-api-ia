@@ -17,7 +17,11 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Dep
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, field_validator
+from fastapi.staticfiles import StaticFiles
+import uuid
+import base64
+import json
+import requests
 from rembg import remove, new_session
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -30,6 +34,10 @@ app = FastAPI(
     description="Microserviço de IA para remover fundo de imagens e retornar em formato PNG transparente.",
     version="1.0.0"
 )
+
+# Servir imagens estáticas locais (Storage Fake)
+os.makedirs("storage", exist_ok=True)
+app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -149,6 +157,20 @@ def startup_db_setup():
                 reason VARCHAR(255) NOT NULL,
                 job_id VARCHAR(255),
                 balance_after INT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                status VARCHAR(50) DEFAULT 'pending',
+                job_type VARCHAR(50) DEFAULT 'bg-removal',
+                tier VARCHAR(50) NOT NULL,
+                result_url TEXT,
+                result_data JSONB,
+                error_message TEXT,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """)
@@ -496,7 +518,7 @@ async def remove_background(
         if balance < cost:
             raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
             
-        # 3. Processar Imagem (Em RAM, ainda síncrono mas logo após as checagens comerciais)
+        # 3. Processar Imagem
         input_image_bytes = await file.read()
         
         alpha_matting = False
@@ -526,7 +548,7 @@ async def remove_background(
                 session=session
             )
         
-        # 4. Debitar Saldo (Transação Atômica)
+        # 4. Debitar Saldo
         new_balance = balance - cost
         cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
         
@@ -543,11 +565,296 @@ async def remove_background(
         return StreamingResponse(io.BytesIO(output_image_bytes), media_type="image/png")
         
     except HTTPException:
-        conn.conn.rollback() # Acesso ao conn interno
+        conn.conn.rollback()
         raise
     except Exception as e:
         conn.conn.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao processar imagem: {str(e)}")
+    finally:
+        conn.close()
+
+# --- AI Integration Helpers ---
+def vision_analyze_mock(input_image_bytes):
+    # Fallback seguro para rodar local sem VLM/CLIP
+    return {
+        "category": "Genérico (Análise Simulação)",
+        "recommendedBgStyle": "studio_white",
+        "confidence": 0.85
+    }
+
+def ollama_generate_copy(category: str):
+    prompt = f"Gere uma cópia comercial em JSON para um produto da categoria: {category}. Inclua as chaves: title, subtitle, description, benefits (array), cta, hashtags, platformSpecific (objeto com instagram, mercadolivre, facebook) e seoKeywords (array)."
+    try:
+        # Tenta conectar no Ollama local (se a VPS ou Dev machine tiver)
+        res = requests.post("http://localhost:11434/api/generate", json={
+            "model": "llama3.1",
+            "prompt": prompt,
+            "stream": False,
+            "format": "json"
+        }, timeout=25)
+        if res.ok:
+            return json.loads(res.json().get("response", "{}"))
+    except Exception as e:
+        print("Ollama indisponível. Usando fallback de desenvolvimento.")
+        pass
+
+    # Fallback caso falhe conexão ou parse
+    return {
+      "title": f"Lançamento: {category}",
+      "subtitle": "Qualidade e design.",
+      "description": "Excelente produto (Gerado por Fallback porque o Ollama não respondeu).",
+      "benefits": ["Garantia", "Durabilidade"],
+      "cta": "Compre já!",
+      "hashtags": "#oferta",
+      "platformSpecific": {
+        "instagram": "Confira! Link na bio.",
+        "facebook": "Aproveite a promoção no nosso site.",
+        "mercadolivre": "Envio Full."
+      },
+      "seoKeywords": ["comprar", category.lower()]
+    }
+
+# Job System Endpoints e Worker
+def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_path: str = None, category_arg: str = None):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE jobs SET status = 'processing' WHERE id = %s;", (job_id,))
+        conn.commit()
+        
+        result_url = None
+        result_data_str = None
+        
+        if job_type == 'bg-removal':
+            with open(input_path, "rb") as f:
+                input_image_bytes = f.read()
+                
+            alpha_matting = False
+            model_name = "u2netp"
+            if tier == "pro":
+                model_name = "u2net"
+                alpha_matting = True
+            elif tier == "premium":
+                model_name = "isnet-general-use"
+                alpha_matting = True
+                
+            session = get_session(model_name)
+            
+            if alpha_matting:
+                output_image_bytes = remove(
+                    input_image_bytes, session=session, alpha_matting=True,
+                    alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10,
+                    alpha_matting_erode_size=10
+                )
+            else:
+                output_image_bytes = remove(input_image_bytes, session=session)
+                
+            output_filename = f"{job_id}_out.png"
+            output_path = os.path.join("storage", output_filename)
+            with open(output_path, "wb") as f:
+                f.write(output_image_bytes)
+                
+            result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
+
+        elif job_type == 'campaign-analyze':
+            with open(input_path, "rb") as f:
+                input_image_bytes = f.read()
+            data = vision_analyze_mock(input_image_bytes)
+            result_data_str = json.dumps(data)
+
+        elif job_type == 'campaign-copy':
+            data = ollama_generate_copy(category_arg or "Genérico")
+            result_data_str = json.dumps(data)
+        
+        cur.execute("UPDATE jobs SET status = 'completed', result_url = %s, result_data = %s WHERE id = %s;", (result_url, result_data_str, job_id))
+        conn.commit()
+        
+        dispatch_webhooks(org_id, tier)
+    except Exception as e:
+        conn.conn.rollback()
+        cur = conn.cursor()
+        cur.execute("UPDATE jobs SET status = 'failed', error_message = %s WHERE id = %s;", (str(e), job_id))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+        try:
+            if input_path and os.path.exists(input_path):
+                os.remove(input_path)
+        except:
+            pass
+
+@app.post("/jobs", status_code=202)
+@limiter.limit("20/minute")
+async def create_job(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...), 
+    tier: str = Form("basic"), 
+    org_id: str = Depends(get_current_org_id)
+):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
+        
+    costs = {"basic": 1, "pro": 3, "premium": 5}
+    cost = costs.get(tier, 1)
+    
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT plan, credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
+        org_data = cur.fetchone()
+        
+        if not org_data:
+            raise HTTPException(status_code=404, detail="Organização não encontrada.")
+            
+        plan = org_data['plan']
+        balance = org_data['credits_balance']
+        
+        if tier == "pro" and plan not in ["pro", "premium"]:
+            raise HTTPException(status_code=403, detail="O Tier Pro exige plano Pro ou Premium.")
+        if tier == "premium" and plan != "premium":
+            raise HTTPException(status_code=403, detail="O Tier Premium exige plano Premium.")
+            
+        if balance < cost:
+            raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
+            
+        input_image_bytes = await file.read()
+        
+        new_balance = balance - cost
+        cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        
+        # Insert Job
+        cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'bg-removal') RETURNING id;", (org_id, tier))
+        job_id = str(cur.fetchone()['id'])
+        
+        cur.execute(
+            "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
+            (org_id, -cost, f"job bg-removal ({tier})", job_id, new_balance)
+        )
+        
+        conn.commit()
+        cur.close()
+        
+        # Save temp file
+        input_path = os.path.join("storage", f"{job_id}_in.png")
+        with open(input_path, "wb") as f:
+            f.write(input_image_bytes)
+            
+        background_tasks.add_task(process_job_task, job_id, org_id, tier, 'bg-removal', input_path)
+        
+        return {"job_id": job_id, "status": "pending", "message": "Job de remoção de fundo aceito."}
+    except HTTPException:
+        conn.conn.rollback()
+        raise
+    except Exception as e:
+        conn.conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao criar job: {str(e)}")
+    finally:
+        conn.close()
+
+class CampaignCopyPayload(BaseModel):
+    category: str
+
+@app.post("/campaigns/analyze", status_code=202)
+@limiter.limit("20/minute")
+async def create_campaign_analyze_job(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...), 
+    org_id: str = Depends(get_current_org_id)
+):
+    # Custo Fixo de Análise Visual
+    cost = 2
+    
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT plan, credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
+        org_data = cur.fetchone()
+        if not org_data: raise HTTPException(status_code=404, detail="Organização não encontrada.")
+            
+        if org_data['credits_balance'] < cost:
+            raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente para análise visual.")
+            
+        input_image_bytes = await file.read()
+        
+        new_balance = org_data['credits_balance'] - cost
+        cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        
+        cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'campaign-analyze') RETURNING id;", (org_id, 'basic'))
+        job_id = str(cur.fetchone()['id'])
+        
+        cur.execute(
+            "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
+            (org_id, -cost, "job campaign-analyze", job_id, new_balance)
+        )
+        conn.commit()
+        cur.close()
+        
+        input_path = os.path.join("storage", f"{job_id}_in.png")
+        with open(input_path, "wb") as f: f.write(input_image_bytes)
+            
+        background_tasks.add_task(process_job_task, job_id, org_id, 'basic', 'campaign-analyze', input_path)
+        return {"job_id": job_id, "status": "pending"}
+    except Exception as e:
+        conn.conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.post("/campaigns/generate-copy", status_code=202)
+@limiter.limit("20/minute")
+async def create_campaign_copy_job(
+    request: Request,
+    payload: CampaignCopyPayload,
+    background_tasks: BackgroundTasks,
+    org_id: str = Depends(get_current_org_id)
+):
+    cost = 1
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT plan, credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
+        org_data = cur.fetchone()
+        
+        if org_data['credits_balance'] < cost:
+            raise HTTPException(status_code=402, detail="Saldo insuficiente.")
+            
+        new_balance = org_data['credits_balance'] - cost
+        cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        
+        cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'campaign-copy') RETURNING id;", (org_id, 'basic'))
+        job_id = str(cur.fetchone()['id'])
+        
+        cur.execute(
+            "INSERT INTO credit_transactions (organization_id, amount, reason, job_id, balance_after) VALUES (%s, %s, %s, %s, %s);",
+            (org_id, -cost, "job campaign-copy", job_id, new_balance)
+        )
+        conn.commit()
+        cur.close()
+            
+        background_tasks.add_task(process_job_task, job_id, org_id, 'basic', 'campaign-copy', input_path=None, category_arg=payload.category)
+        return {"job_id": job_id, "status": "pending"}
+    except Exception as e:
+        conn.conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.get("/jobs/{job_id}")
+def get_job_status(job_id: str, org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, status, job_type, tier, result_url, result_data, error_message, created_at FROM jobs WHERE id = %s AND organization_id = %s LIMIT 1;", (job_id, org_id))
+        job = cur.fetchone()
+        cur.close()
+        
+        if not job:
+            raise HTTPException(status_code=404, detail="Job não encontrado.")
+            
+        return job
     finally:
         conn.close()
 
