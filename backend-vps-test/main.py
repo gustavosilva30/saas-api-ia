@@ -298,8 +298,8 @@ def admin_list_organizations(admin_payload: dict = Depends(get_current_admin)):
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
-            SELECT o.id, o.name, o.plan, o.credits_balance, o.status, 
-                   COUNT(u.id) as users_count
+            SELECT o.id, o.name, o.plan, o.credits_balance as credits, o.status, 
+                   0 as usage, COUNT(u.id) as users_count
             FROM organizations o
             LEFT JOIN users u ON o.id = u.organization_id
             GROUP BY o.id
@@ -310,6 +310,10 @@ def admin_list_organizations(admin_payload: dict = Depends(get_current_admin)):
         # Transformar UUID para string pra não quebrar o JSON serializer
         for org in orgs:
             org['id'] = str(org['id'])
+            if org['status'] == 'active':
+                org['status'] = 'Ativo'
+            if org['credits'] is None:
+                org['credits'] = 0
             
         return orgs
     except Exception as e:
