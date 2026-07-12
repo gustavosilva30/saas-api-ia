@@ -1,3 +1,4 @@
+"use client"
 import React, { useEffect, useState } from "react"
 import { Undo, Redo, Download, Play, ChevronLeft, Image as ImageIcon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
