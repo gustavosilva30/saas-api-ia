@@ -82,8 +82,15 @@ export const api = {
     const formData = new FormData()
     formData.append("image", file)
 
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`
+    }
+
     const response = await fetch('/api/studio/remove-bg', {
       method: "POST",
+      headers,
       body: formData,
     })
 

@@ -15,6 +15,7 @@ import {
   BookOpen,
   LifeBuoy,
   ShieldCheck,
+  Palette,
   type LucideIcon,
 } from "lucide-react"
 
@@ -38,6 +39,7 @@ export const navSections: NavSection[] = [
       { title: "Processar imagens", href: "/dashboard/process", icon: ImageIcon },
       { title: "Processamento em lote", href: "/dashboard/batch", icon: Layers },
       { title: "Histórico", href: "/dashboard/history", icon: History },
+      { title: "Studio Profissional", href: "/studio", icon: Palette },
     ],
   },
   {

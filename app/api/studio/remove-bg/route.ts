@@ -11,7 +11,15 @@ export async function POST(request: Request) {
 
     // A URL da sua API de remoção de fundo rodando na VPS/Easypanel
     const apiUrl = process.env.AI_REMOVE_BG_API_URL || "https://api-ai-saas-api-saas.4p8frk.easypanel.host/remove-bg";
-    const apiKey = process.env.AI_API_KEY || ""; // Chave secreta que não vaza pro front-end
+    let apiKey = process.env.AI_API_KEY || ""; // Chave secreta que não vaza pro front-end
+    
+    // Se não tivermos uma API KEY global, tentamos usar o JWT do usuário logado
+    if (!apiKey) {
+      const authHeader = request.headers.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        apiKey = authHeader.split(" ")[1];
+      }
+    }
 
     const externalFormData = new FormData();
     externalFormData.append("file", imageFile); // Usualmente APIs python esperam "file" ou "image"

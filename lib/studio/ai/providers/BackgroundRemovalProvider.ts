@@ -6,9 +6,17 @@ export class NextApiBackgroundRemovalProvider implements IBackgroundRemovalProvi
       const formData = new FormData();
       formData.append("image", file);
 
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+      
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       // Bate na rota intermediária do Next.js (protege as credenciais)
       const res = await fetch("/api/studio/remove-bg", {
         method: "POST",
+        headers,
         body: formData,
       });
 
