@@ -696,7 +696,6 @@ async def remove_background(
                 raise HTTPException(status_code=402, detail="Saldo de créditos insuficiente.")
             
         # 3. Processar Imagem
-        alpha_matting = False
         model_name = "birefnet-general"
         
         # (Lógica de tier removida para forçar qualidade premium em tudo temporariamente)
@@ -704,23 +703,12 @@ async def remove_background(
         session = get_session(model_name)
         
         async with ai_semaphore:
-            if alpha_matting:
-                output_image_bytes = await asyncio.to_thread(
-                    remove,
-                    input_image_bytes,
-                    session=session,
-                    alpha_matting=True,
-                    alpha_matting_foreground_threshold=240,
-                    alpha_matting_background_threshold=10,
-                    alpha_matting_erode_size=10,
-                    post_process_mask=True
-                )
-            else:
-                output_image_bytes = await asyncio.to_thread(
-                    remove, 
-                    input_image_bytes, 
-                    session=session
-                )
+            output_image_bytes = await asyncio.to_thread(
+                remove, 
+                input_image_bytes, 
+                session=session,
+                post_process_mask=False
+            )
         
         # 4. Debitar Saldo
         if role != "superadmin":
@@ -891,19 +879,12 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
             session = get_session(model_name)
             
             async with ai_semaphore:
-                # Utilizamos post_process_mask=True para limpar chunks indesejados (melhora recortes metálicos e bordas duras)
-                if alpha_matting:
-                    output_image_bytes = await asyncio.to_thread(
-                        remove,
-                        input_image_bytes, session=session, alpha_matting=True,
-                        alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10,
-                        alpha_matting_erode_size=10, post_process_mask=True
-                    )
-                else:
-                    output_image_bytes = await asyncio.to_thread(
-                        remove, 
-                        input_image_bytes, session=session, post_process_mask=True
-                    )
+                # O post_process_mask e alpha_matting podem "borrar" e destruir a resolução original de metais
+                # ao tentar suavizar o que deveria ser uma "borda dura". Portanto usamos o modelo puro.
+                output_image_bytes = await asyncio.to_thread(
+                    remove, 
+                    input_image_bytes, session=session, post_process_mask=False
+                )
                 
             output_filename = f"{job_id}_out.png"
             output_path = os.path.join("storage", output_filename)
