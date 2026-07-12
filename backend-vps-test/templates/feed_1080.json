@@ -1,0 +1,71 @@
+{
+    "id": "feed_1080",
+    "width": 1080,
+    "height": 1080,
+    "elements": [
+        {
+            "type": "background",
+            "color": "#ffffff",
+            "bind": "brand_kit.backgroundColor"
+        },
+        {
+            "type": "text",
+            "name": "title",
+            "bind": "copy.title",
+            "x": 540,
+            "y": 150,
+            "align": "center",
+            "max_width": 900,
+            "font_size": 72,
+            "color": "#000000",
+            "bind_color": "brand_kit.primaryTextColor"
+        },
+        {
+            "type": "text",
+            "name": "subtitle",
+            "bind": "copy.subtitle",
+            "x": 540,
+            "y": 250,
+            "align": "center",
+            "max_width": 800,
+            "font_size": 36,
+            "color": "#666666",
+            "bind_color": "brand_kit.secondaryTextColor"
+        },
+        {
+            "type": "image",
+            "name": "product",
+            "x": 540,
+            "y": 600,
+            "align": "center",
+            "valign": "center",
+            "max_width": 800,
+            "max_height": 500
+        },
+        {
+            "type": "rect",
+            "x": 540,
+            "y": 950,
+            "width": 400,
+            "height": 100,
+            "align": "center",
+            "valign": "center",
+            "color": "#000000",
+            "bind_color": "brand_kit.buttonColor",
+            "border_radius": 20
+        },
+        {
+            "type": "text",
+            "name": "cta",
+            "bind": "copy.cta",
+            "x": 540,
+            "y": 950,
+            "align": "center",
+            "valign": "center",
+            "max_width": 360,
+            "font_size": 36,
+            "color": "#ffffff",
+            "bind_color": "brand_kit.buttonTextColor"
+        }
+    ]
+}

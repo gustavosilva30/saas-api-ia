@@ -1,5 +1,5 @@
 "use client"
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Search, ShoppingBag, Star, Download, Sparkles, Filter, ChevronRight, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,9 +19,14 @@ const TYPE_LABELS: Record<HubItemType, string> = {
 };
 
 export default function AIStudioHubPage() {
-  const { items, inventory, purchaseItem, hasItem } = useMarketplaceStore();
+  const { items, inventory, isLoading, fetchItems, fetchInventory, purchaseItem, hasItem } = useMarketplaceStore();
   const { totalCredits, usedCredits } = useBillingStore();
   const balance = totalCredits - usedCredits;
+
+  useEffect(() => {
+    fetchItems();
+    fetchInventory();
+  }, [fetchItems, fetchInventory]);
 
   const [activeTab, setActiveTab] = useState<"discover" | HubItemType | "inventory">("discover");
   const [search, setSearch] = useState("");
@@ -126,7 +131,12 @@ export default function AIStudioHubPage() {
 
       {/* Vitrine (Grid) */}
       <div className="flex-1 overflow-y-auto pb-8">
-        {filteredItems.length === 0 ? (
+        {isLoading ? (
+          <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+            <div className="size-12 mb-4 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <h3 className="text-lg font-medium">Carregando catálogo...</h3>
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
             <Filter className="size-12 mb-4 opacity-20" />
             <h3 className="text-lg font-medium">Nenhum recurso encontrado</h3>

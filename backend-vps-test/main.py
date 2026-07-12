@@ -225,7 +225,49 @@ def startup_db_setup():
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS marketplace_items (
+                id VARCHAR(50) PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                type VARCHAR(50) NOT NULL,
+                creator VARCHAR(100) NOT NULL,
+                price INT NOT NULL,
+                rating NUMERIC(2, 1) DEFAULT 0,
+                sales INT DEFAULT 0,
+                thumbnail TEXT,
+                tags JSONB,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS organization_purchases (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                item_id VARCHAR(50) NOT NULL REFERENCES marketplace_items(id) ON DELETE CASCADE,
+                purchased_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(organization_id, item_id)
+            );
+        """)
         conn.commit()
+
+        # Seed Marketplace Items
+        cur.execute("SELECT COUNT(*) FROM marketplace_items;")
+        if cur.fetchone()[0] == 0:
+            mock_items = [
+                ("hub_1", "AI Pack: Automotivo Dark", "Pacote cognitivo completo: Fundo escuro, reflexos no chão, copy focado em alta performance e textura de carbono.", "aipack", "Studio Oficial", 2500, 4.9, 1240, "https://images.unsplash.com/photo-1599839619722-39751411ea63?q=80&w=400&auto=format&fit=crop", json.dumps(["automotivo", "dark", "ia"])),
+                ("hub_2", "Template Black Friday", "Layout de alta conversão para Instagram Feed com selos de desconto, tarjas de urgência e fundo neon.", "template", "Agência Croma", 1000, 4.7, 3400, "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?q=80&w=400&auto=format&fit=crop", json.dumps(["varejo", "promocao", "social"])),
+                ("hub_3", "Preset: Sombra de Contato Perfeita", "Algoritmo de oclusão de ambiente para calçados. Cria a sensação exata de peso do produto no chão.", "preset", "ShoeDesign", 500, 4.9, 890, "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=400&auto=format&fit=crop", json.dumps(["tenis", "sombra", "realismo"])),
+                ("hub_4", "Mega Bundle Moda Verão", "Mais de 50 cenários de praia gerados por IA, 10 templates de story e paleta vibrante tropical.", "bundle", "TropicalIA", 5000, 4.8, 210, "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?q=80&w=400&auto=format&fit=crop", json.dumps(["moda", "verao", "texturas"]))
+            ]
+            for item in mock_items:
+                cur.execute(
+                    "INSERT INTO marketplace_items (id, title, description, type, creator, price, rating, sales, thumbnail, tags) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                    item
+                )
+            conn.commit()
 
         cur.execute("SELECT id FROM organizations WHERE name = 'GSN Tech' LIMIT 1;")
         org = cur.fetchone()
@@ -827,8 +869,7 @@ def ollama_generate_copy(category: str):
       "seoKeywords": ["comprar", category.lower()]
     }
 
-# Job System Endpoints e Worker
-async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_path: str = None, category_arg: str = None, mask_path: str = None):
+async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_path: str = None, category_arg: str = None, mask_path: str = None, extra_arg: str = None):
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -869,6 +910,25 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
             with open(output_path, "wb") as f:
                 f.write(output_image_bytes)
                 
+            result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
+
+        elif job_type == 'campaign-build':
+            async with ai_semaphore:
+                builder = CampaignBuilder()
+                product_img = Image.open(input_path)
+                copy_data = json.loads(mask_path) if mask_path else {}
+                brand_kit = json.loads(extra_arg) if extra_arg else {}
+                
+                final_img = await asyncio.to_thread(builder.render, product_img, category_arg, copy_data, brand_kit)
+                
+                output_buffer = io.BytesIO()
+                final_img.save(output_buffer, format="PNG")
+                output_image_bytes = output_buffer.getvalue()
+
+            output_filename = f"{job_id}_campaign_out.png"
+            output_path = os.path.join("storage", output_filename)
+            with open(output_path, "wb") as f:
+                f.write(output_image_bytes)
             result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
 
         elif job_type == 'inpaint':
@@ -1174,6 +1234,77 @@ async def create_campaign_copy_job(
     finally:
         conn.close()
 
+from engine.layout_engine import CampaignBuilder
+
+@app.post("/campaigns/build-batch", status_code=202, tags=["Campanhas AI"], summary="Criar Peças em Lote (Campaign Builder)")
+@limiter.limit("5/minute")
+async def create_campaign_build_batch(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    template_id: str = Form(...),
+    copy_data: str = Form(...), # JSON string
+    brand_kit: str = Form(...), # JSON string
+    images: list[UploadFile] = File(...),
+    org_id: str = Depends(get_current_org_id),
+    role: str = Depends(get_current_role)
+):
+    try:
+        copy_json = json.loads(copy_data)
+        brand_json = json.loads(brand_kit)
+    except:
+        raise HTTPException(status_code=400, detail="copy_data e brand_kit devem ser JSON válidos.")
+        
+    cost_per_image = 1
+    total_cost = cost_per_image * len(images)
+    
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT plan, credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
+        org_data = cur.fetchone()
+        
+        balance = org_data['credits_balance']
+        if role != "superadmin" and balance < total_cost:
+            raise HTTPException(status_code=402, detail=f"Saldo insuficiente. Necessário {total_cost} créditos.")
+            
+        if role != "superadmin":
+            new_balance = balance - total_cost
+            cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+        else:
+            new_balance = balance
+            
+        job_ids = []
+        for file in images:
+            if not file.content_type.startswith("image/"):
+                continue
+                
+            input_image_bytes = await file.read()
+            
+            cur.execute("INSERT INTO jobs (organization_id, tier, status, job_type) VALUES (%s, %s, 'pending', 'campaign-build') RETURNING id;", (org_id, 'basic'))
+            job_id = str(cur.fetchone()['id'])
+            job_ids.append(job_id)
+            
+            input_path = os.path.join("storage", f"{job_id}_build_in.png")
+            with open(input_path, "wb") as f:
+                f.write(input_image_bytes)
+                
+            # Passamos os JSONs via arg para o process_job_task (adaptando a assinatura)
+            background_tasks.add_task(process_job_task, job_id, org_id, 'basic', 'campaign-build', input_path, category_arg=template_id, mask_path=copy_data, extra_arg=brand_kit)
+            
+        if role != "superadmin" and len(job_ids) > 0:
+            cur.execute(
+                "INSERT INTO credit_transactions (organization_id, amount, reason, balance_after) VALUES (%s, %s, %s, %s);",
+                (org_id, -total_cost, "batch campaign-build", new_balance)
+            )
+            
+        conn.commit()
+        return {"message": f"{len(job_ids)} jobs de composição criados.", "job_ids": job_ids}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
 @app.get("/jobs/{job_id}", tags=["IA Assíncrona"], summary="Verificar status do Job")
 def get_job_status(job_id: str, org_id: str = Depends(get_current_org_id)):
     conn = get_db_connection()
@@ -1413,6 +1544,85 @@ def apply_preset_batch(
             
         conn.commit()
         return {"message": f"{len(job_ids)} jobs criados com sucesso.", "job_ids": job_ids}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+# --- Marketplace (AI Studio Hub) ---
+@app.get("/marketplace/items", tags=["Marketplace"], summary="Listar itens do Hub")
+def get_marketplace_items():
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, title, description, type, creator, price, rating, sales, thumbnail, tags FROM marketplace_items ORDER BY created_at ASC;")
+        items = cur.fetchall()
+        return items
+    finally:
+        conn.close()
+
+@app.get("/marketplace/inventory", tags=["Marketplace"], summary="Listar itens comprados")
+def get_marketplace_inventory(org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT item_id FROM organization_purchases WHERE organization_id = %s;", (org_id,))
+        rows = cur.fetchall()
+        return [r[0] for r in rows]
+    finally:
+        conn.close()
+
+@app.post("/marketplace/purchase/{item_id}", tags=["Marketplace"], summary="Comprar item do Hub")
+def purchase_marketplace_item(item_id: str, org_id: str = Depends(get_current_org_id), role: str = Depends(get_current_role)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 1. Verifica se já possui o item
+        cur.execute("SELECT id FROM organization_purchases WHERE organization_id = %s AND item_id = %s;", (org_id, item_id))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="Item já adquirido.")
+            
+        # 2. Busca informações do item
+        cur.execute("SELECT price, title FROM marketplace_items WHERE id = %s;", (item_id,))
+        item = cur.fetchone()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item não encontrado no Marketplace.")
+            
+        price = item['price']
+        
+        # 3. Transação atômica para debitar saldo
+        cur.execute("SELECT credits_balance FROM organizations WHERE id = %s FOR UPDATE;", (org_id,))
+        org = cur.fetchone()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organização não encontrada.")
+            
+        balance = org['credits_balance']
+        
+        if role != "superadmin":
+            if balance < price:
+                raise HTTPException(status_code=402, detail=f"Créditos insuficientes. O item custa {price}, mas você só tem {balance}.")
+            
+            new_balance = balance - price
+            cur.execute("UPDATE organizations SET credits_balance = %s WHERE id = %s;", (new_balance, org_id))
+            
+            cur.execute(
+                "INSERT INTO credit_transactions (organization_id, amount, reason, balance_after) VALUES (%s, %s, %s, %s);",
+                (org_id, -price, f"marketplace purchase ({item_id})", new_balance)
+            )
+            
+            # TODO: Aumentar as sales do marketplace_item (opcional)
+            cur.execute("UPDATE marketplace_items SET sales = sales + 1 WHERE id = %s;", (item_id,))
+            
+        # 4. Registra a posse do item
+        cur.execute("INSERT INTO organization_purchases (organization_id, item_id) VALUES (%s, %s);", (org_id, item_id))
+        
+        conn.commit()
+        return {"message": f"Recurso '{item['title']}' adquirido com sucesso!"}
     except HTTPException:
         conn.rollback()
         raise
