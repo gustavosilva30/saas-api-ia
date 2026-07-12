@@ -1,6 +1,6 @@
 import { fabric } from "fabric";
 import { v4 as uuidv4 } from "uuid";
-import { IRenderEngine } from "./IRenderEngine";
+import { IRenderEngine, LayerInfo } from "./IRenderEngine";
 import { EventBus, StudioEvent } from "../events/EventBus";
 
 export class FabricAdapter implements IRenderEngine {
@@ -212,5 +212,55 @@ export class FabricAdapter implements IRenderEngine {
       this.canvas.requestRenderAll();
       EventBus.emit(StudioEvent.OBJECT_MODIFIED, activeObject);
     }
+  }
+
+  // --- Layers Management ---
+
+  getLayers(): LayerInfo[] {
+    if (!this.canvas) return [];
+    // O array de objetos do Fabric.js está ordenado do mais ao fundo (índice 0) para o mais ao topo
+    // Vamos retornar invertido para a UI listar o mais acima primeiro
+    const objects = this.canvas.getObjects();
+    return objects.map((obj, index) => ({
+      id: (obj as any).id || "unknown",
+      type: obj.type || "object",
+      zIndex: index
+    })).reverse();
+  }
+
+  bringForward(id: string): void {
+    if (!this.canvas) return;
+    const obj = this.canvas.getObjects().find((o: any) => o.id === id);
+    if (obj) {
+      this.canvas.bringForward(obj);
+      this.canvas.requestRenderAll();
+      EventBus.emit(StudioEvent.OBJECT_MODIFIED, obj);
+    }
+  }
+
+  sendBackwards(id: string): void {
+    if (!this.canvas) return;
+    const obj = this.canvas.getObjects().find((o: any) => o.id === id);
+    if (obj) {
+      this.canvas.sendBackwards(obj);
+      this.canvas.requestRenderAll();
+      EventBus.emit(StudioEvent.OBJECT_MODIFIED, obj);
+    }
+  }
+
+  // --- Export ---
+
+  exportImage(options?: { format?: "png" | "jpeg"; quality?: number; multiplier?: number }): string {
+    if (!this.canvas) return "";
+    
+    // Remover seleção antes de exportar
+    this.canvas.discardActiveObject();
+    this.canvas.requestRenderAll();
+
+    return this.canvas.toDataURL({
+      format: options?.format || "png",
+      quality: options?.quality || 1,
+      multiplier: options?.multiplier || 2 // Alta resolução (800x600 -> 1600x1200)
+    });
   }
 }

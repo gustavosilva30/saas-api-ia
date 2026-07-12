@@ -1,3 +1,9 @@
+export interface LayerInfo {
+  id: string;
+  type: string;
+  zIndex: number;
+}
+
 export interface IRenderEngine {
   /**
    * Inicializa o motor gráfico em um elemento HTML.
@@ -55,7 +61,6 @@ export interface IRenderEngine {
    */
   removeObject(id: string): void;
 
-  /**
    * Retorna um objeto JSON contendo os parâmetros de sombra aplicados ao objeto selecionado.
    */
   getSelectedObjectShadow(): any;
@@ -63,5 +68,13 @@ export interface IRenderEngine {
   /**
    * Aplica uma sombra ao objeto selecionado.
    */
-  applyShadowToSelected(shadow: any): void;
+  applyShadowToSelected(shadowOptions: any): void;
+
+  // Gerenciamento de Camadas
+  getLayers(): LayerInfo[];
+  bringForward(id: string): void;
+  sendBackwards(id: string): void;
+
+  // Exportação
+  exportImage(options?: { format?: "png" | "jpeg"; quality?: number; multiplier?: number }): string;
 }
