@@ -60,10 +60,15 @@ export function StudioCanvasArea() {
         </div>
       )}
 
-      <canvas ref={canvasRef} className="absolute inset-0" />
+      {/* Wrapper do Canvas: Protege o Fabric.js contra re-renders do React */}
+      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+        <div className="pointer-events-auto" style={{ width: "100%", height: "100%" }}>
+          <canvas ref={canvasRef} />
+        </div>
+      </div>
       
       {/* Aqui podemos adicionar uma grade (Grid) estática de fundo via CSS se desejado,
-          pois o background color está sendo controlado pelo FabricAdapter */}
+          mas o motor gráfico cuida do fundo por padrão. */}
     </div>
   )
 }
