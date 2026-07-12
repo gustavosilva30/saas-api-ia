@@ -1,3 +1,4 @@
+"use client"
 import React, { useState, useEffect } from "react"
 import { Sun } from "lucide-react"
 import { StudioPlugin } from "@/lib/studio/plugins/BasePlugin"

@@ -1,3 +1,4 @@
+"use client"
 import React from "react"
 import { Palette } from "lucide-react"
 import { StudioPlugin } from "@/lib/studio/plugins/BasePlugin"

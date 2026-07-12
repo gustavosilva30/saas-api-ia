@@ -1,3 +1,4 @@
+"use client"
 import React from "react"
 import { Image as ImageIcon } from "lucide-react"
 import { StudioPlugin } from "@/lib/studio/plugins/BasePlugin"
