@@ -51,7 +51,7 @@ export default function SettingsPage() {
             <div className="space-y-2">
               <Label htmlFor="default-tier">Plano de Qualidade Padrão (Tier)</Label>
               <Select defaultValue="basic">
-                <SelectTrigger id="default-tier">
+                <SelectTrigger id="default-tier" className="w-full md:max-w-xs">
                   <SelectValue placeholder="Selecione um tier" />
                 </SelectTrigger>
                 <SelectContent>

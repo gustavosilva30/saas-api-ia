@@ -44,9 +44,19 @@ export const api = {
       const errorData = await response.json().catch(() => ({}))
       throw new Error(errorData.detail || "Erro ao realizar o cadastro.")
     }
-    const data = await response.json()
-    localStorage.setItem("auth_token", data.token)
-    return data
+    return response.json()
+  },
+  async verifyEmail(token: string) {
+    const response = await fetch(`${API_BASE}/auth/verify-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || "Link inválido ou expirado.")
+    }
+    return response.json()
   },
 
   // Dashboard

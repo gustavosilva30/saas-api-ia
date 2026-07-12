@@ -369,7 +369,7 @@ export default function BatchPage() {
       {/* Modal de Comparação Slider Antes/Depois */}
       <Dialog open={selectedItem !== null} onOpenChange={(open) => !open && setSelectedItem(null)}>
         {selectedItem && (
-          <DialogContent className="max-w-3xl w-[90vw] max-h-[90vh] overflow-y-auto flex flex-col gap-6">
+          <DialogContent className="sm:max-w-[850px] w-[95vw] max-h-[90vh] overflow-y-auto flex flex-col gap-4 p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl font-bold">
                 <SlidersHorizontal className="w-5 h-5 text-primary" />
@@ -382,8 +382,8 @@ export default function BatchPage() {
 
             <div className="grid gap-6 md:grid-cols-3">
               {/* Painel Esquerdo: Comparador Slider */}
-              <div className="md:col-span-2 flex flex-col items-center justify-center">
-                <div className="relative w-full aspect-square md:aspect-auto md:h-[450px] overflow-hidden rounded-xl border bg-checkerboard flex items-center justify-center select-none shadow-inner">
+              <div className="md:col-span-2 flex flex-col items-center justify-center min-w-0">
+                <div className="relative w-full aspect-square md:aspect-auto md:h-[400px] overflow-hidden rounded-xl border bg-checkerboard flex items-center justify-center select-none shadow-inner">
                   {/* Imagem de Fundo (Sem Fundo + Cor selecionada) */}
                   <div
                     className={cn(
@@ -441,28 +441,37 @@ export default function BatchPage() {
               </div>
 
               {/* Painel Direito: Configurações e Download */}
-              <div className="flex flex-col justify-between border-t md:border-t-0 md:border-l pt-6 md:pt-0 md:pl-6 gap-6">
+              <div className="flex flex-col justify-between border-t md:border-t-0 md:border-l pt-4 md:pt-0 md:pl-6 gap-6 min-w-0">
                 <div className="space-y-6">
                   {/* Seletor de Fundo no Modal */}
                   <div className="space-y-3">
                     <h4 className="text-sm font-semibold">Visualizar com Fundo:</h4>
                     <div className="grid grid-cols-2 gap-2">
-                      {(["transparent", "white", "black", "gray"] as BgColor[]).map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => setPreviewBgColor(color)}
-                          className={cn(
-                            "px-3 py-2 rounded-lg border text-xs font-semibold shadow-xs transition-all capitalize text-center",
-                            color === "transparent" && "bg-checkerboard border-border",
-                            color === "white" && "bg-white text-black border-border",
-                            color === "black" && "bg-black text-white border-zinc-800",
-                            color === "gray" && "bg-gray-500 text-white border-zinc-600",
-                            previewBgColor === color ? "ring-2 ring-primary border-primary scale-102" : "opacity-80 hover:opacity-100"
-                          )}
-                        >
-                          {color === "transparent" ? "Transparente" : color}
-                        </button>
-                      ))}
+                      {(["transparent", "white", "black", "gray"] as BgColor[]).map((color) => {
+                        const labels = {
+                          transparent: "Transp.",
+                          white: "Branco",
+                          black: "Preto",
+                          gray: "Cinza",
+                        };
+                        return (
+                          <button
+                            key={color}
+                            onClick={() => setPreviewBgColor(color)}
+                            className={cn(
+                              "px-2 py-2 rounded-lg border text-xs font-semibold shadow-xs transition-all text-center truncate",
+                              color === "transparent" && "bg-checkerboard border-border",
+                              color === "white" && "bg-white text-black border-border",
+                              color === "black" && "bg-black text-white border-zinc-800",
+                              color === "gray" && "bg-gray-500 text-white border-zinc-600",
+                              previewBgColor === color ? "ring-2 ring-primary border-primary scale-102" : "opacity-80 hover:opacity-100"
+                            )}
+                            title={labels[color]}
+                          >
+                            {labels[color]}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -470,20 +479,20 @@ export default function BatchPage() {
                   <div className="space-y-2 border-t pt-4">
                     <h4 className="text-sm font-semibold">Informações da Imagem:</h4>
                     <div className="space-y-1.5 text-xs text-muted-foreground">
-                      <p><strong>Nome:</strong> <span className="text-foreground">{selectedItem.file.name}</span></p>
+                      <p className="truncate"><strong>Nome:</strong> <span className="text-foreground">{selectedItem.file.name}</span></p>
                       <p><strong>Tamanho:</strong> <span className="text-foreground">{(selectedItem.file.size / 1024).toFixed(1)} KB</span></p>
-                      <p><strong>Formato de Saída:</strong> <span className="text-foreground">PNG Transparente</span></p>
+                      <p><strong>Formato:</strong> <span className="text-foreground">PNG Transparente</span></p>
                     </div>
                   </div>
                 </div>
 
                 {/* Ações de Download */}
                 <div className="space-y-2 border-t pt-4 mt-auto">
-                  <Button className="w-full" onClick={() => downloadSingle(selectedItem, previewBgColor)}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Baixar com Fundo {previewBgColor === "transparent" ? "Transparente" : previewBgColor}
+                  <Button className="w-full text-xs py-2 h-auto" onClick={() => downloadSingle(selectedItem, previewBgColor)}>
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    {previewBgColor === "transparent" ? "Baixar Sem Fundo" : `Baixar com Fundo`}
                   </Button>
-                  <Button variant="outline" className="w-full" onClick={() => setSelectedItem(null)}>
+                  <Button variant="outline" className="w-full text-xs py-2 h-auto" onClick={() => setSelectedItem(null)}>
                     Fechar
                   </Button>
                 </div>

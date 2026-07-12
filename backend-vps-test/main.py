@@ -34,7 +34,7 @@ JWT_ALGORITHM = "HS256"
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 RESEND_FROM_EMAIL = os.getenv("EMAIL_FROM") or os.getenv("RESEND_FROM_EMAIL") or "onboarding@resend.dev"
 
-def send_confirmation_email(to_email: str, user_name: str):
+def send_confirmation_email(to_email: str, user_name: str, token: str):
     if not RESEND_API_KEY:
         print("Aviso: RESEND_API_KEY não configurada. E-mail de confirmação não enviado.")
         return
@@ -45,21 +45,28 @@ def send_confirmation_email(to_email: str, user_name: str):
         "Content-Type": "application/json"
     }
     
+    # Link apontando para a rota de verificação no Next.js
+    verification_link = f"https://saas-api-ia.gustavosilva.com.br/verify-email?token={token}"
+    
     html_content = f"""
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff;">
-        <h2 style="color: #0f172a; margin-top: 0; font-size: 22px;">Sua conta foi criada com sucesso!</h2>
+        <h2 style="color: #0f172a; margin-top: 0; font-size: 22px;">Confirme seu e-mail para ativar sua conta!</h2>
         <p style="color: #475569; font-size: 16px; line-height: 1.6;">Olá, <strong>{user_name}</strong>!</p>
         <p style="color: #475569; font-size: 16px; line-height: 1.6;">
-            Ficamos muito felizes em ter a sua empresa conosco. Sua conta na plataforma de Remoção de Fundo de Imagem IA já está ativa.
-        </p>
-        <p style="color: #475569; font-size: 16px; line-height: 1.6;">
-            A partir de agora você pode acessar seu painel para acompanhar o uso de créditos, cadastrar chaves de API e automatizar seus recortes de fotos.
+            Obrigado por se cadastrar na nossa plataforma de Remoção de Fundo de Imagem IA. Para liberar seu acesso ao sistema, confirme seu endereço de e-mail clicando no botão abaixo:
         </p>
         <div style="margin: 30px 0; text-align: center;">
-            <a href="https://saas-api-ia.gustavosilva.com.br/login" style="background-color: #0f172a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">
-                Acessar Meu Painel
+            <a href="{verification_link}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">
+                Confirmar E-mail & Ativar Conta
             </a>
         </div>
+        <p style="color: #64748b; font-size: 14px;">
+            Ou copie e cole este link no seu navegador: <br/>
+            <a href="{verification_link}" style="color: #10b981;">{verification_link}</a>
+        </p>
+        <p style="color: #64748b; font-size: 14px; margin-top: 15px;">
+            Este link é válido por 24 horas.
+        </p>
         <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
         <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-bottom: 0;">
             Se você não se cadastrou nesta plataforma, ignore este e-mail.
@@ -70,7 +77,7 @@ def send_confirmation_email(to_email: str, user_name: str):
     data = {
         "from": RESEND_FROM_EMAIL,
         "to": [to_email],
-        "subject": "Bem-vindo! Sua conta foi criada com sucesso",
+        "subject": "Confirme seu e-mail - Remoção de Fundo IA",
         "html": html_content
     }
     
@@ -172,9 +179,9 @@ def register_user(payload: RegisterPayload):
         # Criptografar a senha
         hashed_password = bcrypt.hashpw(payload.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         
-        # Criar o usuário
+        # Criar o usuário pendente (requer verificação de e-mail)
         cur.execute(
-            "INSERT INTO users (organization_id, name, email, password_hash, role, status) VALUES (%s, %s, %s, %s, 'owner', 'active') RETURNING id;",
+            "INSERT INTO users (organization_id, name, email, password_hash, role, status) VALUES (%s, %s, %s, %s, 'owner', 'pending') RETURNING id;",
             (org_id, payload.name, payload.email, hashed_password)
         )
         user_id = cur.fetchone()[0]
@@ -183,25 +190,19 @@ def register_user(payload: RegisterPayload):
         cur.close()
         conn.close()
         
-        # Enviar o e-mail de confirmação via Resend
-        send_confirmation_email(payload.email, payload.name)
-        
-        token = jwt.encode({
+        # Gerar o token de verificação (expira em 24 horas)
+        verify_token = jwt.encode({
             "sub": str(user_id),
-            "email": payload.email,
-            "role": "owner",
-            "org_id": str(org_id),
-            "exp": datetime.utcnow() + timedelta(days=7)
+            "type": "verify_email",
+            "exp": datetime.utcnow() + timedelta(hours=24)
         }, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+        # Enviar o e-mail de confirmação via Resend contendo o link do token
+        send_confirmation_email(payload.email, payload.name, verify_token)
         
         return {
-            "token": token,
-            "user": {
-                "name": payload.name,
-                "email": payload.email,
-                "role": "owner",
-                "company": payload.company
-            }
+            "message": "Cadastro realizado com sucesso! Verifique seu e-mail para ativar a conta.",
+            "status": "pending"
         }
     except HTTPException:
         raise
@@ -218,7 +219,7 @@ def login_user(payload: LoginPayload):
         
         cur.execute(
             """
-            SELECT u.id, u.name, u.email, u.password_hash, u.role, u.organization_id, o.name as company_name 
+            SELECT u.id, u.name, u.email, u.password_hash, u.role, u.status, u.organization_id, o.name as company_name 
             FROM users u
             JOIN organizations o ON u.organization_id = o.id
             WHERE u.email = %s LIMIT 1;
@@ -231,6 +232,12 @@ def login_user(payload: LoginPayload):
             cur.close()
             conn.close()
             raise HTTPException(status_code=401, detail="E-mail ou senha incorretos.")
+            
+        # Verificar se e-mail está confirmado
+        if user['status'] == 'pending':
+            cur.close()
+            conn.close()
+            raise HTTPException(status_code=403, detail="Por favor, confirme seu e-mail para ativar sua conta e liberar o acesso.")
             
         # Comparar senha com bcrypt
         if not bcrypt.checkpw(payload.password.encode('utf-8'), user['password_hash'].encode('utf-8')):
@@ -262,6 +269,52 @@ def login_user(payload: LoginPayload):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro no login: {str(e)}")
+
+# Novo Schema e Endpoint para confirmação de e-mail
+class VerifyPayload(BaseModel):
+    token: str
+
+@app.post("/auth/verify-email")
+def verify_email(payload: VerifyPayload):
+    if not DATABASE_URL:
+        raise HTTPException(status_code=500, detail="Banco de dados não configurado.")
+    try:
+        data = jwt.decode(payload.token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if data.get("type") != "verify_email":
+            raise HTTPException(status_code=400, detail="Token inválido.")
+        user_id = data.get("sub")
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Verificar se usuário existe e está pendente
+        cur.execute("SELECT status FROM users WHERE id = %s LIMIT 1;", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            cur.close()
+            conn.close()
+            raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+            
+        if user[0] == 'active':
+            cur.close()
+            conn.close()
+            return {"message": "E-mail já verificado anteriormente!"}
+            
+        # Atualizar status para active
+        cur.execute("UPDATE users SET status = 'active' WHERE id = %s;", (user_id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return {"message": "Conta ativada com sucesso!"}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail="O link de confirmação expirou.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=400, detail="Link de confirmação inválido.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao verificar e-mail: {str(e)}")
 
 @app.get("/")
 def read_root():
