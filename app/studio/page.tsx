@@ -1,6 +1,11 @@
 import { StudioTopbar } from "@/components/studio/layout/StudioTopbar"
 import { StudioSidebar } from "@/components/studio/layout/StudioSidebar"
-import { StudioCanvasArea } from "@/components/studio/layout/StudioCanvasArea"
+import dynamic from "next/dynamic"
+
+const StudioCanvasArea = dynamic(
+  () => import("@/components/studio/layout/StudioCanvasArea").then(mod => mod.StudioCanvasArea),
+  { ssr: false }
+)
 import { StudioPropertiesPanel } from "@/components/studio/layout/StudioPropertiesPanel"
 
 export const metadata = {
