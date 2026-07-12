@@ -16,6 +16,7 @@ import {
   LifeBuoy,
   ShieldCheck,
   Palette,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react"
 
@@ -38,6 +39,7 @@ export const navSections: NavSection[] = [
       { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { title: "Processar imagens", href: "/dashboard/process", icon: ImageIcon },
       { title: "Processamento em lote", href: "/dashboard/batch", icon: Layers },
+      { title: "Campaign Builder", href: "/dashboard/campaigns", icon: Sparkles, badge: "Novo" },
       { title: "Histórico", href: "/dashboard/history", icon: History },
       { title: "Studio Profissional", href: "/studio", icon: Palette },
     ],
@@ -80,6 +82,7 @@ export const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/dashboard/process": "Processar imagens",
   "/dashboard/batch": "Processamento em lote",
+  "/dashboard/campaigns": "Campaign Builder",
   "/dashboard/history": "Histórico",
   "/dashboard/api": "API",
   "/dashboard/api-keys": "API Keys",
