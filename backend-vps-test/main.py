@@ -37,7 +37,7 @@ import psutil
 
 import os
 
-torch.set_num_threads(int(os.environ.get("TORCH_NUM_THREADS", "2")))
+torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
