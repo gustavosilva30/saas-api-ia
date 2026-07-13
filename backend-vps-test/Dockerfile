@@ -10,9 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pré-carrega os modelos de IA no build (evita consumo excessivo de RAM no primeiro request)
-RUN python -c "from rembg import new_session; new_session('birefnet-general-lite')"
-RUN python -c "from rembg import new_session; new_session('birefnet-general')"
+ENV MALLOC_ARENA_MAX=2
+ENV TORCH_NUM_THREADS=2
+ENV HF_HOME=/root/.cache/huggingface
+
+# Pré-carrega o BiRefNet oficial (PyTorch) no build, não o ONNX do rembg
+RUN echo "from transformers import AutoModelForImageSegmentation" > /tmp/preload_model.py && \
+    echo "AutoModelForImageSegmentation.from_pretrained('ZhengPeng7/BiRefNet', trust_remote_code=True)" >> /tmp/preload_model.py && \
+    python /tmp/preload_model.py && rm /tmp/preload_model.py
+
+# Pré-carrega CLIP
 RUN python -c "from transformers import CLIPModel, CLIPProcessor; CLIPModel.from_pretrained('openai/clip-vit-base-patch32'); CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')"
 
 COPY . .
