@@ -25,37 +25,23 @@ import json
 import requests
 import asyncio
 import io
-import torch
+from rembg import remove, new_session
+import rembg
 from PIL import Image, ImageFilter, ImageEnhance
-from transformers import CLIPProcessor, CLIPModel, AutoModelForImageSegmentation
-from torchvision import transforms
+from transformers import CLIPProcessor, CLIPModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import psutil
 
-
 import os
 
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
+device = "cpu"
+print(f"Iniciando sessao rembg (ONNX) para evitar Segfaults do PyTorch...")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Usando dispositivo: {device}")
-print(f"Threads PyTorch (intra-op): {torch.get_num_threads()}")
-
-birefnet_model = AutoModelForImageSegmentation.from_pretrained(
-    "ZhengPeng7/BiRefNet_lite", trust_remote_code=True
-)
-birefnet_model.to(device)
-if device.type == 'cuda':
-    birefnet_model.float() 
-else:
-    birefnet_model.float()
-birefnet_model.eval()
+birefnet_session = new_session("birefnet-general-lite")
 
 INFERENCE_SIDE = int(os.environ.get("IA_INFERENCE_SIZE", "1024"))
-print(f"Tamanho de inferência BiRefNet: {INFERENCE_SIDE}px")
 
 ai_semaphore = asyncio.Semaphore(2)
 
@@ -69,19 +55,9 @@ def resize_for_inference(image_bytes: bytes, max_dim: int = 1600) -> bytes:
     return image_bytes
 
 def processar_ia_birefnet(input_image: Image.Image, return_transparent: bool = True, bg_color_hex: str = None) -> Image.Image:
-    input_image_rgb = input_image.convert("RGB")
-    transform_image = transforms.Compose([
-        transforms.Resize((INFERENCE_SIDE, INFERENCE_SIDE)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
-    input_tensor = transform_image(input_image_rgb).unsqueeze(0).to(device).float()
-
-    with torch.no_grad():
-        preds = birefnet_model(input_tensor)[-1].sigmoid().cpu()
-
-    pred = preds[0].squeeze()
-    mask = transforms.ToPILImage()(pred).resize(input_image.size, Image.LANCZOS)
+    # 1) Obtém a máscara diretamente pelo rembg que usa ONNX (sem conflitos de C++)
+    mask = remove(input_image, session=birefnet_session, only_mask=True)
+    mask = mask.convert("L").resize(input_image.size, Image.LANCZOS)
 
     threshold_low = int(os.environ.get("MASK_THRESHOLD_LOW", "35"))
     threshold_high = int(os.environ.get("MASK_THRESHOLD_HIGH", "225"))
