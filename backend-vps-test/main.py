@@ -778,7 +778,8 @@ async def remove_background(
             
         # 3. Processar Imagem
         async with ai_semaphore:
-            input_pil = Image.open(io.BytesIO(input_image_bytes))
+            resized_bytes = resize_for_inference(input_image_bytes, max_dim=1600)
+            input_pil = Image.open(io.BytesIO(resized_bytes))
             
             return_transparent = (bg_color == "transparent")
             bg_color_hex = bg_color if bg_color.startswith("#") else None
@@ -957,7 +958,9 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
             async with ai_semaphore:
                 with open(input_path, "rb") as f:
                     input_image_bytes = f.read()
-                input_pil = Image.open(io.BytesIO(input_image_bytes))
+                
+                resized_bytes = resize_for_inference(input_image_bytes, max_dim=1600)
+                input_pil = Image.open(io.BytesIO(resized_bytes))
                 
                 # extra_arg can be the bg_color (if it exists)
                 bg_color = extra_arg if extra_arg else "transparent"
