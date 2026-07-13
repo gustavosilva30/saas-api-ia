@@ -45,7 +45,7 @@ print(f"Usando dispositivo: {device}")
 print(f"Threads PyTorch (intra-op): {torch.get_num_threads()}")
 
 birefnet_model = AutoModelForImageSegmentation.from_pretrained(
-    "ZhengPeng7/BiRefNet", trust_remote_code=True
+    "ZhengPeng7/BiRefNet_lite", trust_remote_code=True
 )
 birefnet_model.to(device)
 if device.type == 'cuda':

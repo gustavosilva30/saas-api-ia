@@ -16,7 +16,7 @@ ENV HF_HOME=/root/.cache/huggingface
 
 # Pré-carrega o BiRefNet oficial (PyTorch) no build, não o ONNX do rembg
 RUN echo "from transformers import AutoModelForImageSegmentation" > /tmp/preload_model.py && \
-    echo "AutoModelForImageSegmentation.from_pretrained('ZhengPeng7/BiRefNet', trust_remote_code=True)" >> /tmp/preload_model.py && \
+    echo "AutoModelForImageSegmentation.from_pretrained('ZhengPeng7/BiRefNet_lite', trust_remote_code=True)" >> /tmp/preload_model.py && \
     python /tmp/preload_model.py && rm /tmp/preload_model.py
 
 # Pré-carrega CLIP
