@@ -33,9 +33,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import psutil
-import onnxruntime as ort
-import cv2
-import numpy as np
+
 
 ai_semaphore = asyncio.Semaphore(2)
 
@@ -207,7 +205,7 @@ def get_session(model_name: str):
         # Ele lê OMP_NUM_THREADS do ambiente para configurar onnxruntime intra/inter threads.
         import os
         os.environ["OMP_NUM_THREADS"] = "2"
-        sessions[model_name] = new_session(model_name, providers=["CPUExecutionProvider"])
+        sessions[model_name] = new_session(model_name)
     return sessions[model_name]
 
 @app.on_event("startup")
