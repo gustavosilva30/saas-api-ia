@@ -760,8 +760,7 @@ async def remove_background(
             return_transparent = (bg_color == "transparent")
             bg_color_hex = bg_color if bg_color.startswith("#") else None
             
-            output_pil = await asyncio.to_thread(
-                processar_ia_birefnet, 
+            output_pil = processar_ia_birefnet(
                 input_pil, 
                 return_transparent=return_transparent,
                 bg_color_hex=bg_color_hex
@@ -943,8 +942,7 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
                 return_transparent = (bg_color == "transparent")
                 bg_color_hex = bg_color if bg_color.startswith("#") else None
                 
-                output_pil = await asyncio.to_thread(
-                    processar_ia_birefnet, 
+                output_pil = processar_ia_birefnet(
                     input_pil, 
                     return_transparent=return_transparent,
                     bg_color_hex=bg_color_hex
@@ -1773,7 +1771,7 @@ async def melhorar_imagem(request: Request, file: UploadFile = File(...), org_id
     try:
         img = Image.open(io.BytesIO(input_image_bytes))
         async with ai_semaphore:
-            img = await asyncio.to_thread(melhorar_imagem_leve, img)
+            img = melhorar_imagem_leve(img)
         buf = io.BytesIO()
         img.save(buf, format='PNG', optimize=True)
         return StreamingResponse(io.BytesIO(buf.getvalue()), media_type='image/png')
