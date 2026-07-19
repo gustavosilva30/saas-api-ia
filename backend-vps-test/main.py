@@ -63,7 +63,7 @@ def processar_ia_birefnet_proxy(input_image_bytes: bytes, return_transparent: bo
             IA_FUNDO_SERVICE_URL, 
             files=files, 
             params=params,
-            timeout=30 # timeout de 30 segundos
+            timeout=120 # timeout de 120 segundos para inferência na CPU
         )
         
         if response.status_code != 200:
