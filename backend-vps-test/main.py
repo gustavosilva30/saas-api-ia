@@ -36,7 +36,7 @@ import os
 device = "cpu"
 print(f"Iniciando em modo Proxy para o microserviço de IA do CRM Loja...")
 
-IA_FUNDO_SERVICE_URL = os.environ.get("IA_FUNDO_SERVICE_URL", "http://api-ia-fundo:5000/remover-fundo/")
+IA_FUNDO_SERVICE_URL = os.environ.get("IA_FUNDO_SERVICE_URL", "https://api-ia-fundo-crm-api-ia-fundo.4p8frk.easypanel.host/remover-fundo/")
 
 ai_semaphore = asyncio.Semaphore(5) # Aumentamos a concorrência pois o processamento é delegado
 
