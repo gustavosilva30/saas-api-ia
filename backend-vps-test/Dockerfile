@@ -14,11 +14,7 @@ ENV MALLOC_ARENA_MAX=2
 ENV TORCH_NUM_THREADS=2
 ENV HF_HOME=/root/.cache/huggingface
 
-# Pré-carrega o modelo lite do rembg no build para evitar lentidao no primeiro request
-RUN python -c "from rembg import new_session; new_session('birefnet-general-lite')"
-
-# Pré-carrega CLIP
-RUN python -c "from transformers import CLIPModel, CLIPProcessor; CLIPModel.from_pretrained('openai/clip-vit-base-patch32'); CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')"
+# Não é mais necessário pré-carregar modelos localmente, atuando como proxy
 
 COPY . .
 
