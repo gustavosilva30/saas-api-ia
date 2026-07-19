@@ -25,10 +25,7 @@ import json
 import requests
 import asyncio
 import io
-from rembg import remove, new_session
-import rembg
 from PIL import Image, ImageFilter, ImageEnhance
-from transformers import CLIPProcessor, CLIPModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -37,13 +34,11 @@ import psutil
 import os
 
 device = "cpu"
-print(f"Iniciando sessao rembg (ONNX) para evitar Segfaults do PyTorch...")
+print(f"Iniciando em modo Proxy para o microserviço de IA do CRM Loja...")
 
-birefnet_session = new_session("birefnet-general-lite")
+IA_FUNDO_SERVICE_URL = os.environ.get("IA_FUNDO_SERVICE_URL", "http://api-ia-fundo:5000/remover-fundo/")
 
-INFERENCE_SIDE = int(os.environ.get("IA_INFERENCE_SIZE", "1024"))
-
-ai_semaphore = asyncio.Semaphore(2)
+ai_semaphore = asyncio.Semaphore(5) # Aumentamos a concorrência pois o processamento é delegado
 
 def resize_for_inference(image_bytes: bytes, max_dim: int = 1600) -> bytes:
     img = Image.open(io.BytesIO(image_bytes))
@@ -54,37 +49,44 @@ def resize_for_inference(image_bytes: bytes, max_dim: int = 1600) -> bytes:
         return buf.getvalue()
     return image_bytes
 
-def processar_ia_birefnet(input_image: Image.Image, return_transparent: bool = True, bg_color_hex: str = None) -> Image.Image:
-    # 1) Obtém a máscara diretamente pelo rembg que usa ONNX (sem conflitos de C++)
-    mask = remove(input_image, session=birefnet_session, only_mask=True)
-    mask = mask.convert("L").resize(input_image.size, Image.LANCZOS)
-
-    threshold_low = int(os.environ.get("MASK_THRESHOLD_LOW", "35"))
-    threshold_high = int(os.environ.get("MASK_THRESHOLD_HIGH", "225"))
-    mask = mask.point(lambda p: 0 if p < threshold_low else (255 if p > threshold_high else int((p - threshold_low) * 255 / (threshold_high - threshold_low))))
-
-    blur_radius = float(os.environ.get("MASK_BLUR_RADIUS", "0.7"))
-    if blur_radius > 0:
-        mask = mask.filter(ImageFilter.GaussianBlur(radius=blur_radius))
-
-    input_image_rgba = input_image.convert("RGBA")
-    if os.environ.get("IA_DISABLE_UNSHARP", "").lower() not in ("1", "true", "yes"):
-        obj_rgb = input_image_rgba.convert("RGB")
-        obj_rgb = obj_rgb.filter(ImageFilter.UnsharpMask(radius=0.8, percent=100, threshold=2))
-        input_image_rgba.paste(obj_rgb, (0, 0), mask)
-
-    input_image_rgba.putalpha(mask)
-
-    if return_transparent:
-        return input_image_rgba
-
-    if bg_color_hex and bg_color_hex.startswith("#"):
-        bg_color = bg_color_hex
-    else:
-        bg_color = "#ffffff"
+def processar_ia_birefnet_proxy(input_image_bytes: bytes, return_transparent: bool = True, bg_color_hex: str = None) -> bytes:
+    """Envia a imagem para o serviço externo de IA (api-ia-fundo)."""
+    try:
+        # Envia como multipart/form-data
+        files = {'file': ('image.jpg', input_image_bytes, 'image/jpeg')}
+        params = {}
+        if return_transparent:
+            params['transparent'] = '1'
+            
+        print(f"Enviando imagem para IA externa: {IA_FUNDO_SERVICE_URL}")
+        response = requests.post(
+            IA_FUNDO_SERVICE_URL, 
+            files=files, 
+            params=params,
+            timeout=30 # timeout de 30 segundos
+        )
         
-    fundo_solido = Image.new("RGBA", input_image.size, bg_color)
-    return Image.alpha_composite(fundo_solido, input_image_rgba).convert("RGB")
+        if response.status_code != 200:
+            print(f"Erro na IA Externa: {response.status_code} - {response.text}")
+            raise Exception(f"Serviço de IA indisponível ou falhou ({response.status_code})")
+            
+        result_bytes = response.content
+        
+        # Se for para colocar fundo de cor sólida e a IA devolveu transparente
+        if not return_transparent and bg_color_hex and bg_color_hex.startswith("#"):
+            img = Image.open(io.BytesIO(result_bytes)).convert("RGBA")
+            fundo_solido = Image.new("RGBA", img.size, bg_color_hex)
+            img_final = Image.alpha_composite(fundo_solido, img).convert("RGB")
+            buf = io.BytesIO()
+            img_final.save(buf, format="JPEG", quality=95, optimize=True)
+            return buf.getvalue(), "image/jpeg"
+            
+        media_type = "image/png" if return_transparent else "image/jpeg"
+        return result_bytes, media_type
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Erro de conexão com o serviço IA externo: {e}")
+        raise Exception("Não foi possível conectar ao serviço de processamento de imagem")
 
 def melhorar_imagem_leve(img: Image.Image) -> Image.Image:
     orig_w, orig_h = img.size
@@ -760,21 +762,12 @@ async def remove_background(
             return_transparent = (bg_color == "transparent")
             bg_color_hex = bg_color if bg_color.startswith("#") else None
             
-            output_pil = processar_ia_birefnet(
-                input_pil, 
+            output_image_bytes, media_type = processar_ia_birefnet_proxy(
+                resized_bytes, 
                 return_transparent=return_transparent,
                 bg_color_hex=bg_color_hex
             )
-            
-            buf = io.BytesIO()
-            if return_transparent:
-                output_pil.save(buf, format="PNG", optimize=True)
-                media_type = "image/png"
-            else:
-                output_pil.save(buf, format="JPEG", quality=95, optimize=True)
-                media_type = "image/jpeg"
-                
-            output_image_bytes = buf.getvalue()
+
         
         # 4. Debitar Saldo
         if role != "superadmin":

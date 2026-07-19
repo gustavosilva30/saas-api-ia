@@ -1,10 +1,5 @@
---extra-index-url https://download.pytorch.org/whl/cpu
 fastapi==0.111.0
 uvicorn==0.30.1
-torchvision
-einops
-kornia
-timm
 pillow==10.3.0
 python-multipart==0.0.9
 psycopg2-binary==2.9.9
@@ -14,11 +9,5 @@ requests==2.32.3
 slowapi==0.1.9
 pydantic==2.7.4
 email-validator
-torch
-transformers
 psutil
-onnxruntime
-opencv-python-headless
-huggingface-hub
 numpy<2.0.0
-rembg

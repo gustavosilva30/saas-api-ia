@@ -1,0 +1,21 @@
+{
+  "name": "saas-ai-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server para schema do banco e status da VPS do SaaS AI",
+  "type": "module",
+  "main": "saas-mcp.mjs",
+  "scripts": {
+    "start": "node saas-mcp.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@supabase/supabase-js": "^2.103.0",
+    "dotenv": "^17.4.2",
+    "minio": "^8.0.7",
+    "pg": "^8.20.0",
+    "ssh2": "^1.17.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
