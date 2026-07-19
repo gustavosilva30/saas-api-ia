@@ -1,18 +1,38 @@
 import { create } from "zustand";
 
+export type AnimationPreset = "fade-in" | "slide-in" | "float" | "pulse";
+
+export interface AnimationClip {
+  id: string;
+  preset: AnimationPreset;
+  startTime: number;
+  duration: number;
+}
+
+export interface AnimationTrack {
+  layerId: string;
+  clips: AnimationClip[];
+}
+
 interface TimelineState {
-  currentTime: number; // Em milissegundos
-  duration: number; // Duração total em milissegundos
+  currentTime: number;
+  duration: number;
   isPlaying: boolean;
-  fps: number; // Configuração visual/lógica (ex: 60)
+  fps: number;
+  
+  tracks: Record<string, AnimationTrack>;
   
   play: () => void;
   pause: () => void;
   seek: (timeMs: number) => void;
   setDuration: (durationMs: number) => void;
+  
+  addClip: (layerId: string, clip: AnimationClip) => void;
+  removeClip: (layerId: string, clipId: string) => void;
+  updateClip: (layerId: string, clipId: string, updates: Partial<AnimationClip>) => void;
+  clearTracks: () => void;
 }
 
-// Controla o loop externo do rAF fora do estado reativo para evitar sobrecarga no React
 let animationFrameId: number | null = null;
 let lastTimestamp: number | null = null;
 
@@ -32,7 +52,6 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
 
     let newTime = state.currentTime + delta;
     
-    // Auto-loop quando chega no fim
     if (newTime >= state.duration) {
       newTime = 0;
     }
@@ -43,16 +62,16 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
 
   return {
     currentTime: 0,
-    duration: 5000, // 5 segundos padrão
+    duration: 5000,
     isPlaying: false,
     fps: 60,
+    tracks: {},
 
     play: () => {
       const { isPlaying, currentTime, duration } = get();
       if (isPlaying) return;
       
       let startFrom = currentTime;
-      // Se estava no final, recomeça
       if (startFrom >= duration) {
         startFrom = 0;
         set({ currentTime: 0 });
@@ -76,6 +95,43 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
 
     setDuration: (durationMs: number) => {
       set({ duration: durationMs });
-    }
+    },
+    
+    addClip: (layerId, clip) => set((state) => {
+      const track = state.tracks[layerId] || { layerId, clips: [] };
+      return {
+        tracks: {
+          ...state.tracks,
+          [layerId]: { ...track, clips: [...track.clips, clip] }
+        }
+      };
+    }),
+    
+    removeClip: (layerId, clipId) => set((state) => {
+      const track = state.tracks[layerId];
+      if (!track) return state;
+      return {
+        tracks: {
+          ...state.tracks,
+          [layerId]: { ...track, clips: track.clips.filter(c => c.id !== clipId) }
+        }
+      };
+    }),
+    
+    updateClip: (layerId, clipId, updates) => set((state) => {
+      const track = state.tracks[layerId];
+      if (!track) return state;
+      return {
+        tracks: {
+          ...state.tracks,
+          [layerId]: {
+            ...track,
+            clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
+          }
+        }
+      };
+    }),
+    
+    clearTracks: () => set({ tracks: {} })
   };
 });

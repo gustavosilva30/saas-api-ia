@@ -38,14 +38,12 @@ export function StudioTopbar() {
     if (localCommandManager) localCommandManager.redo()
   }
 
+  const [isExportingVideo, setIsExportingVideo] = useState(false)
+
   const handleExport = async () => {
     if (!engine) return
-    
     setIsExporting(true)
-    
-    // Simula a Job System (mesmo sendo sincrono, nós damos uma folga pro React renderizar o Loading)
     await new Promise(resolve => setTimeout(resolve, 500))
-    
     try {
       const dataUrl = engine.exportImage({ format: "png", multiplier: 2 })
       if (dataUrl) {
@@ -61,6 +59,20 @@ export function StudioTopbar() {
       alert("Falha ao exportar imagem.")
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const handleExportVideo = async () => {
+    // Princípio 7: Processamento Assíncrono (Job System)
+    setIsExportingVideo(true)
+    try {
+      // Simula o enfileiramento do Job no backend
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      alert("Sucesso! Job de renderização de vídeo enfileirado. Você será notificado quando o MP4 estiver pronto.")
+    } catch (error) {
+      alert("Falha ao agendar renderização de vídeo.")
+    } finally {
+      setIsExportingVideo(false)
     }
   }
 
@@ -89,9 +101,13 @@ export function StudioTopbar() {
       </div>
       
       <div className="flex items-center gap-2">
-        <Button variant="secondary" size="sm">
-          <Play className="h-4 w-4 mr-2" />
-          Testar API
+        <Button size="sm" variant="outline" onClick={handleExportVideo} disabled={isExportingVideo}>
+          {isExportingVideo ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Play className="h-4 w-4 mr-2" />
+          )}
+          {isExportingVideo ? "Gerando..." : "Exportar Vídeo"}
         </Button>
         <Button size="sm" onClick={handleExport} disabled={isExporting}>
           {isExporting ? (
@@ -99,7 +115,7 @@ export function StudioTopbar() {
           ) : (
             <Download className="h-4 w-4 mr-2" />
           )}
-          {isExporting ? "Exportando..." : "Exportar"}
+          {isExporting ? "Exportando..." : "Exportar Imagem"}
         </Button>
       </div>
     </div>

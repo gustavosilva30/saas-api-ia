@@ -1,35 +1,42 @@
 "use client"
-import React, { useEffect, useRef } from "react"
-import { Play, Pause, SkipBack, Scissors, Clock, Settings2 } from "lucide-react"
+import React, { useRef, useState } from "react"
+import { Play, Pause, SkipBack, Scissors, Clock, Settings2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
-import { useTimelineStore } from "@/store/useTimelineStore"
+import { useTimelineStore, AnimationPreset } from "@/store/useTimelineStore"
+import { useStudioStore } from "@/store/useStudioStore"
 
 export function TimelinePlugin() {
-  const { currentTime, duration, isPlaying, play, pause, seek } = useTimelineStore();
+  const { currentTime, duration, isPlaying, play, pause, seek, tracks, addClip, updateClip } = useTimelineStore();
+  const { layers } = useStudioStore();
   const timelineRef = useRef<HTMLDivElement>(null);
+  
+  const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
 
-  // Formata ms em "00:00:00" (min:sec:frames/ms)
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
     const seconds = (totalSeconds % 60).toString().padStart(2, "0");
-    const frames = Math.floor((ms % 1000) / (1000/60)).toString().padStart(2, "0"); // Aproximação de 60fps
+    const frames = Math.floor((ms % 1000) / (1000/60)).toString().padStart(2, "0");
     return `${minutes}:${seconds}:${frames}`;
   };
 
   const handleSeek = (values: number[]) => {
-    if (values[0] !== undefined) {
-      seek(values[0]);
-    }
+    if (values[0] !== undefined) seek(values[0]);
   };
 
-  // Mock de layers animáveis
-  const layers = [
-    { id: "L1", name: "Produto.png", type: "Image" },
-    { id: "L2", name: "Selo Preço", type: "Group" },
-    { id: "L3", name: "Fundo Preto", type: "Shape" },
-  ];
+  const handleAddClip = (layerId: string) => {
+    addClip(layerId, {
+      id: Math.random().toString(36).substr(2, 9),
+      preset: "float",
+      startTime: currentTime,
+      duration: 1000
+    });
+  };
+
+  const handlePresetChange = (layerId: string, clipId: string, preset: AnimationPreset) => {
+    updateClip(layerId, clipId, { preset });
+  };
 
   return (
     <div className="h-64 border-t bg-background flex flex-col shadow-inner z-50">
@@ -56,9 +63,11 @@ export function TimelinePlugin() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="size-8">
-            <Scissors className="size-4 text-muted-foreground" />
-          </Button>
+          {selectedLayer && (
+             <Button variant="outline" size="sm" onClick={() => handleAddClip(selectedLayer)}>
+               <Plus className="size-4 mr-1" /> Anim Layer
+             </Button>
+          )}
           <Button variant="ghost" size="icon" className="size-8">
             <Settings2 className="size-4 text-muted-foreground" />
           </Button>
@@ -74,8 +83,13 @@ export function TimelinePlugin() {
             Layers
           </div>
           <div className="flex flex-col">
+            {layers.length === 0 && <div className="p-4 text-xs text-muted-foreground">Nenhuma camada adicionada no Canvas.</div>}
             {layers.map(layer => (
-              <div key={layer.id} className="h-10 border-b flex items-center px-3 text-sm hover:bg-muted/50 cursor-pointer">
+              <div 
+                key={layer.id} 
+                className={`h-10 border-b flex items-center px-3 text-sm cursor-pointer ${selectedLayer === layer.id ? 'bg-primary/10' : 'hover:bg-muted/50'}`}
+                onClick={() => setSelectedLayer(layer.id)}
+              >
                 <span className="truncate">{layer.name}</span>
                 <span className="ml-auto text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded uppercase">{layer.type}</span>
               </div>
@@ -83,22 +97,19 @@ export function TimelinePlugin() {
           </div>
         </div>
 
-        {/* Área da Timeline (Keyframes e Agulha) */}
+        {/* Área da Timeline */}
         <div className="flex-1 relative flex flex-col bg-muted/5">
-          {/* Régua de Tempo */}
           <div className="h-8 border-b bg-muted/30 flex items-center px-4 relative">
              <Slider 
                 value={[currentTime]} 
                 max={duration} 
-                step={16.66} // ~60fps
+                step={16.66}
                 onValueChange={handleSeek}
                 className="absolute inset-x-4 top-1/2 -translate-y-1/2 z-20 cursor-grab active:cursor-grabbing"
               />
           </div>
 
-          {/* Faixas de Tempo (Tracks) */}
           <div className="flex-1 relative overflow-y-auto">
-             {/* Agulha de Reprodução (Playhead visual) */}
              <div 
                className="absolute top-0 bottom-0 w-px bg-red-500 z-10 pointer-events-none"
                style={{ left: `calc(1rem + (100% - 2rem) * (${currentTime} / ${duration}))` }}
@@ -106,15 +117,34 @@ export function TimelinePlugin() {
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full w-3 h-3 bg-red-500 clip-playhead" style={{ clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }} />
              </div>
 
-             {layers.map((layer, i) => (
-                <div key={layer.id} className="h-10 border-b relative group">
-                  {/* Mock de um bloco de animação (Clip) */}
-                  <div className="absolute top-1 bottom-1 bg-primary/20 border border-primary/50 rounded-sm" 
-                       style={{ left: `${10 + i * 5}%`, right: `${10 + (2-i) * 5}%` }}>
-                    <div className="text-[10px] font-medium text-primary p-1 truncate">Motion Block</div>
+             {layers.map((layer) => {
+                const track = tracks[layer.id];
+                return (
+                  <div key={layer.id} className="h-10 border-b relative group">
+                    {track && track.clips.map(clip => {
+                       const leftPct = (clip.startTime / duration) * 100;
+                       const widthPct = (clip.duration / duration) * 100;
+                       
+                       return (
+                         <div key={clip.id} 
+                              className="absolute top-1 bottom-1 bg-primary/20 border border-primary/50 rounded-sm flex items-center px-1" 
+                              style={{ left: `calc(1rem + (100% - 2rem) * (${leftPct} / 100))`, width: `calc((100% - 2rem) * (${widthPct} / 100))` }}>
+                           <select 
+                             className="text-[10px] bg-transparent font-medium text-primary outline-none cursor-pointer"
+                             value={clip.preset}
+                             onChange={(e) => handlePresetChange(layer.id, clip.id, e.target.value as AnimationPreset)}
+                           >
+                             <option value="fade-in">Fade In</option>
+                             <option value="slide-in">Slide In</option>
+                             <option value="float">Float</option>
+                             <option value="pulse">Pulse</option>
+                           </select>
+                         </div>
+                       )
+                    })}
                   </div>
-                </div>
-             ))}
+                )
+             })}
           </div>
         </div>
       </div>
