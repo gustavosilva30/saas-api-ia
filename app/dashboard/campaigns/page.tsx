@@ -147,6 +147,51 @@ export default function CampaignBuilderPage() {
     );
   }
 
+  const handleExport = async () => {
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+
+      if (copywriting) {
+        let textContent = `Campanha: ${copywriting.title}\n\n`;
+        textContent += `Instagram:\n${copywriting.platformSpecific.instagram}\n\n`;
+        textContent += `Mercado Livre:\n${copywriting.platformSpecific.mercadolivre}\n\n`;
+        textContent += `Facebook:\n${copywriting.platformSpecific.facebook}\n\n`;
+        textContent += `Hashtags: ${copywriting.hashtags}\n`;
+        zip.file("textos_venda.txt", textContent);
+      }
+
+      if (cutoutUrl) {
+        const res = await fetch(cutoutUrl);
+        const blob = await res.blob();
+        zip.file("produto_original.png", blob);
+      }
+
+      for (const asset of generatedAssets) {
+        if (asset.bgUrl) {
+          try {
+            const res = await fetch(asset.bgUrl);
+            const blob = await res.blob();
+            zip.file(`cenario_ia_${asset.format}.jpg`, blob);
+          } catch (e) {
+            console.error("Erro ao baixar fundo", e);
+          }
+        }
+      }
+
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = window.URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = "minha_campanha_ia.zip";
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Erro no zip", e);
+      alert("Não foi possível gerar o ZIP.");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader 
@@ -155,7 +200,7 @@ export default function CampaignBuilderPage() {
       >
         <div className="flex gap-2">
           <Button variant="outline" onClick={resetCampaign}>Nova Campanha</Button>
-          <Button><Download className="mr-2 size-4" /> Exportar Pacote (.ZIP)</Button>
+          <Button onClick={handleExport}><Download className="mr-2 size-4" /> Exportar Pacote (.ZIP)</Button>
         </div>
       </PageHeader>
       
