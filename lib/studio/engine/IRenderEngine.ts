@@ -121,4 +121,8 @@ export interface IRenderEngine {
 
   // Exportação
   exportImage(options?: { format?: "png" | "jpeg"; quality?: number; multiplier?: number }): string;
+
+  // Persistência de Estado
+  exportState(): string;
+  loadState(stateJson: string): Promise<void>;
 }

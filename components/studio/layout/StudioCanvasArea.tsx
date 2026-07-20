@@ -4,8 +4,11 @@ import React, { useEffect, useRef } from "react"
 import { FabricAdapter } from "@/lib/studio/adapters/FabricAdapter"
 import { MotionEngine } from "@/lib/studio/engine/MotionEngine"
 import { useStudioStore } from "@/store/useStudioStore"
+import { EventBus, StudioEvent } from "@/lib/studio/events/EventBus"
 import { Loader2 } from "lucide-react"
 import { AssetClassifier } from "@/lib/studio/ai/AssetClassifier"
+
+const AUTOSAVE_KEY = "ai_studio_autosave"
 
 export function StudioCanvasArea() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -28,6 +31,29 @@ export function StudioCanvasArea() {
     adapterRef.current = adapter
     setEngine(adapter)
 
+    // Tenta carregar o estado salvo previamente
+    const savedState = localStorage.getItem(AUTOSAVE_KEY)
+    if (savedState) {
+      adapter.loadState(savedState).catch(e => console.error("Error loading autosave:", e))
+    }
+
+    // Auto-Save: Escutamos eventos que modificam o canvas
+    let saveTimeout: NodeJS.Timeout
+    const saveState = () => {
+      clearTimeout(saveTimeout)
+      saveTimeout = setTimeout(() => {
+        if (adapterRef.current) {
+          const state = adapterRef.current.exportState()
+          localStorage.setItem(AUTOSAVE_KEY, state)
+        }
+      }, 500) // debounce de 500ms
+    }
+
+    const unsubAdd = EventBus.on(StudioEvent.OBJECT_ADDED, saveState)
+    const unsubRemove = EventBus.on(StudioEvent.OBJECT_REMOVED, saveState)
+    const unsubMod = EventBus.on(StudioEvent.OBJECT_MODIFIED, saveState)
+    const unsubHistory = EventBus.on(StudioEvent.HISTORY_CHANGED, saveState)
+
     // Acopla o MotionEngine
     const motion = MotionEngine.getInstance()
     motion.attachRenderEngine(adapter)
@@ -49,6 +75,10 @@ export function StudioCanvasArea() {
 
     return () => {
       window.removeEventListener("resize", handleResize)
+      unsubAdd()
+      unsubRemove()
+      unsubMod()
+      unsubHistory()
       motion.detachRenderEngine()
       if (adapterRef.current) {
         adapterRef.current.destroy()

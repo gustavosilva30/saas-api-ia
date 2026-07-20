@@ -504,4 +504,30 @@ export class FabricAdapter implements IRenderEngine {
       multiplier: options?.multiplier || 2 // Alta resolução (800x600 -> 1600x1200)
     });
   }
+
+  // --- Persistência de Estado (Auto-Save) ---
+
+  exportState(): string {
+    if (!this.canvas) return "";
+    // Exportamos a tela junto com a propriedade customizada 'id' e filtros
+    const json = this.canvas.toJSON(['id']);
+    return JSON.stringify(json);
+  }
+
+  loadState(stateJson: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.canvas) return reject("Canvas not initialized");
+      
+      try {
+        const json = JSON.parse(stateJson);
+        this.canvas.loadFromJSON(json, () => {
+          this.canvas!.requestRenderAll();
+          resolve();
+        });
+      } catch (err) {
+        console.error("Failed to load canvas state", err);
+        reject(err);
+      }
+    });
+  }
 }
