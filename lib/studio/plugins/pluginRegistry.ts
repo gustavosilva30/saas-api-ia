@@ -7,7 +7,7 @@ import { LayersPlugin } from "@/components/studio/plugins/LayersPlugin"
 import { HistoryPlugin } from "@/components/studio/plugins/HistoryPlugin"
 import { AdjustmentsPlugin } from "@/components/studio/plugins/AdjustmentsPlugin"
 import { SelectionPlugin } from "@/components/studio/plugins/SelectionPlugin"
-import { TextPlugin } from "@/components/studio/plugins/TextPlugin"
+import { TypographyPlugin } from "@/components/studio/plugins/TypographyPlugin/TypographyPlugin"
 import { ShapePlugin } from "@/components/studio/plugins/ShapePlugin"
 import { ExportPlugin } from "@/components/studio/plugins/ExportPlugin"
 
@@ -23,7 +23,7 @@ export function registerAllPlugins() {
     PluginManager.register(ShadowPlugin)
     PluginManager.register(AdjustmentsPlugin)
     PluginManager.register(SelectionPlugin)
-    PluginManager.register(TextPlugin)
+    PluginManager.register(TypographyPlugin)
     PluginManager.register(ShapePlugin)
     PluginManager.register(RemoveBgPlugin)
     PluginManager.register(LayersPlugin)

@@ -72,6 +72,18 @@ export interface IRenderEngine {
   removeObject(id: string): void;
 
   /**
+   * Adiciona um texto ao centro do canvas.
+   * Retorna o ID gerado do objeto inserido.
+   */
+  addText(text: string, options?: {
+    fontFamily?: string;
+    fontSize?: number;
+    fill?: string;
+    fontWeight?: string | number;
+    textAlign?: string;
+  }): string;
+
+  /**
    * Atualiza propriedades numéricas/visuais de um objeto (usado pelo Motion Engine).
    */
   updateObjectProperties(id: string, properties: any): void;

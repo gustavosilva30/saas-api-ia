@@ -266,6 +266,40 @@ export class FabricAdapter implements IRenderEngine {
     }
   }
 
+  addText(text: string, options?: {
+    fontFamily?: string;
+    fontSize?: number;
+    fill?: string;
+    fontWeight?: string | number;
+    textAlign?: string;
+  }): string {
+    if (!this.canvas) return "";
+
+    const id = uuidv4();
+    const textObject = new fabric.IText(text, {
+      id, // custom id property
+      left: this.canvas.width! / 2,
+      top: this.canvas.height! / 2,
+      originX: 'center',
+      originY: 'center',
+      fontFamily: options?.fontFamily || 'Inter, sans-serif',
+      fontSize: options?.fontSize || 40,
+      fill: options?.fill || '#ffffff',
+      fontWeight: options?.fontWeight || 'normal',
+      textAlign: options?.textAlign || 'left',
+      cornerColor: '#3b82f6',
+      cornerStyle: 'circle',
+      borderColor: '#3b82f6',
+      transparentCorners: false,
+    } as any);
+
+    this.canvas.add(textObject);
+    this.canvas.setActiveObject(textObject);
+    this.canvas.requestRenderAll();
+    
+    return id;
+  }
+
   updateObjectProperties(id: string, properties: any): void {
     if (!this.canvas) return;
     const objects = this.canvas.getObjects() as any[];
