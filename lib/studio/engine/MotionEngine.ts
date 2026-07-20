@@ -1,6 +1,8 @@
 import { IRenderEngine } from "./IRenderEngine";
-import { useTimelineStore, AnimationPreset } from "@/store/useTimelineStore";
+import { useTimelineStore } from "@/store/useTimelineStore";
 import { EventBus, StudioEvent } from "../events/EventBus";
+import { MotionLibrary } from "./MotionLibrary";
+import { EasingFunctions } from "./EasingFunctions";
 
 interface BaseState {
   startY: number;
@@ -144,57 +146,71 @@ export class MotionEngine {
         }
       }
 
-      const { preset, startTime, duration } = activeClip;
+      // Values to apply to Canvas
+      let props: Record<string, number> = {
+        top: baseState.startY,
+        left: baseState.startX,
+        opacity: baseState.startOpacity,
+        scaleX: baseState.startScaleX,
+        scaleY: baseState.startScaleY,
+        angle: 0 // angle missing in BaseState but we can animate it
+      };
+
+      const { preset, startTime, duration, easing, delay = 0, loop = false, pingPong = false } = activeClip;
       
-      let progress = 0;
-      if (isAfter) progress = 1;
-      else if (!isBefore) {
-        progress = (currentTime - startTime) / duration;
-        progress = Math.max(0, Math.min(progress, 1));
+      const animDef = MotionLibrary[preset];
+      if (animDef) {
+        // Adjust for delay
+        const actualStartTime = startTime + delay;
+        const actualDuration = duration;
+        
+        let progress = 0;
+        
+        if (currentTime < actualStartTime) {
+          progress = 0;
+        } else if (currentTime > actualStartTime + actualDuration) {
+          progress = 1;
+        } else {
+          progress = (currentTime - actualStartTime) / actualDuration;
+          progress = Math.max(0, Math.min(progress, 1));
+        }
+
+        if (loop) {
+          progress = ((currentTime - actualStartTime) % actualDuration) / actualDuration;
+          if (progress < 0) progress = 0;
+        }
+
+        if (pingPong) {
+          // 0 to 1 to 0
+          progress = progress <= 0.5 ? progress * 2 : 2 - (progress * 2);
+        }
+
+        const easingName = easing || animDef.defaultEasing || "linear";
+        const easingFn = EasingFunctions[easingName] || EasingFunctions.linear;
+        const easedProgress = easingFn(progress);
+
+        animDef.keyframes.forEach(kf => {
+          const from = Number(kf.from) || 0;
+          const to = Number(kf.to) || 0;
+          const interpolated = from + (to - from) * easedProgress;
+
+          if (kf.property === 'opacity') {
+            props.opacity = baseState.startOpacity * interpolated;
+          } else if (kf.property === 'left') {
+            props.left = baseState.startX + interpolated;
+          } else if (kf.property === 'top') {
+            props.top = baseState.startY + interpolated;
+          } else if (kf.property === 'scaleX') {
+            props.scaleX = baseState.startScaleX * interpolated;
+          } else if (kf.property === 'scaleY') {
+            props.scaleY = baseState.startScaleY * interpolated;
+          } else if (kf.property === 'angle') {
+            props.angle = interpolated;
+          }
+        });
       }
 
-      // Calculando easing simples (Ease Out)
-      const easeOut = 1 - (1 - progress) * (1 - progress);
-
-      // Valores atuais aplicados ao Canvas
-      let currentY = baseState.startY;
-      let currentX = baseState.startX;
-      let currentOpacity = baseState.startOpacity;
-      let currentScaleX = baseState.startScaleX;
-      let currentScaleY = baseState.startScaleY;
-
-      switch (preset) {
-        case "fade-in":
-          currentOpacity = baseState.startOpacity * easeOut;
-          break;
-        case "slide-in":
-          const offset = 100;
-          currentY = baseState.startY + offset - (offset * easeOut);
-          currentOpacity = baseState.startOpacity * easeOut;
-          break;
-        case "float":
-          // Animação contínua durante o clip
-          if (!isBefore && !isAfter) {
-             const osc = Math.sin((currentTime - startTime) / 300) * 15;
-             currentY = baseState.startY + osc;
-          }
-          break;
-        case "pulse":
-          if (!isBefore && !isAfter) {
-             const scaleOsc = 1 + Math.sin((currentTime - startTime) / 150) * 0.05;
-             currentScaleX = baseState.startScaleX * scaleOsc;
-             currentScaleY = baseState.startScaleY * scaleOsc;
-          }
-          break;
-      }
-
-      this.renderEngine!.updateObjectProperties(layerId, {
-        top: currentY,
-        left: currentX,
-        opacity: currentOpacity,
-        scaleX: currentScaleX,
-        scaleY: currentScaleY,
-      });
+      this.renderEngine!.updateObjectProperties(layerId, props);
 
       hasUpdates = true;
     });

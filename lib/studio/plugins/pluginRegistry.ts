@@ -10,6 +10,7 @@ import { SelectionPlugin } from "@/components/studio/plugins/SelectionPlugin"
 import { TypographyPlugin } from "@/components/studio/plugins/TypographyPlugin/TypographyPlugin"
 import { ShapePlugin } from "@/components/studio/plugins/ShapePlugin"
 import { ExportPlugin } from "@/components/studio/plugins/ExportPlugin"
+import { MotionPropertiesPlugin } from "@/components/studio/plugins/MotionPropertiesPlugin"
 
 import { AIProviderManager } from "@/lib/studio/ai/AIProviderManager"
 import { NextApiBackgroundRemovalProvider } from "@/lib/studio/ai/providers/BackgroundRemovalProvider"
@@ -28,6 +29,7 @@ export function registerAllPlugins() {
     PluginManager.register(LayersPlugin)
     PluginManager.register(HistoryPlugin)
     PluginManager.register(ExportPlugin)
+    PluginManager.register(MotionPropertiesPlugin)
 
     // Registra os provedores de IA
     AIProviderManager.registerBgRemovalProvider(new NextApiBackgroundRemovalProvider())

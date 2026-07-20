@@ -4,9 +4,13 @@ export type AnimationPreset = "fade-in" | "slide-in" | "float" | "pulse";
 
 export interface AnimationClip {
   id: string;
-  preset: AnimationPreset;
+  preset: string; // Refere-se ao id do MotionLibrary
   startTime: number;
   duration: number;
+  easing?: string;
+  delay?: number;
+  loop?: boolean;
+  pingPong?: boolean;
 }
 
 export interface AnimationTrack {
@@ -22,12 +26,14 @@ interface TimelineState {
   playbackRate: number;
   
   tracks: Record<string, AnimationTrack>;
+  selectedClipId: string | null;
   
   play: () => void;
   pause: () => void;
   seek: (timeMs: number) => void;
   setDuration: (durationMs: number) => void;
   setPlaybackRate: (rate: number) => void;
+  setSelectedClipId: (clipId: string | null) => void;
   
   addClip: (layerId: string, clip: AnimationClip) => void;
   removeClip: (layerId: string, clipId: string) => void;
@@ -70,6 +76,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
     fps: 60,
     playbackRate: 1,
     tracks: {},
+    selectedClipId: null,
 
     play: () => {
       const { isPlaying, currentTime, duration } = get();
@@ -103,6 +110,10 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
     
     setPlaybackRate: (rate: number) => {
       set({ playbackRate: rate });
+    },
+    
+    setSelectedClipId: (clipId: string | null) => {
+      set({ selectedClipId: clipId });
     },
     
     addClip: (layerId, clip) => set((state) => {

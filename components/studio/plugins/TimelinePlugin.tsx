@@ -3,8 +3,9 @@ import React, { useRef, useState } from "react"
 import { Play, Pause, SkipBack, Scissors, Clock, Settings2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
-import { useTimelineStore, AnimationPreset } from "@/store/useTimelineStore"
+import { useTimelineStore } from "@/store/useTimelineStore"
 import { useStudioStore } from "@/store/useStudioStore"
+import { MotionLibrary } from "@/lib/studio/engine/MotionLibrary"
 
 export function TimelinePlugin() {
   const { currentTime, duration, isPlaying, play, pause, seek, tracks, addClip, updateClip } = useTimelineStore();
@@ -34,7 +35,7 @@ export function TimelinePlugin() {
     });
   };
 
-  const handlePresetChange = (layerId: string, clipId: string, preset: AnimationPreset) => {
+  const handlePresetChange = (layerId: string, clipId: string, preset: string) => {
     updateClip(layerId, clipId, { preset });
   };
 
@@ -146,6 +147,8 @@ export function TimelinePlugin() {
             onPointerDown={(e) => {
               if (!timelineRef.current) return;
               
+              useTimelineStore.getState().setSelectedClipId(null);
+              
               // Se clicou em um select ou clip, ignorar para não conflitar com drag de clip
               if ((e.target as HTMLElement).tagName === 'SELECT' || (e.target as HTMLElement).closest('.clip-draggable')) return;
               
@@ -186,12 +189,19 @@ export function TimelinePlugin() {
                        const leftPct = (clip.startTime / duration) * 100;
                        const widthPct = (clip.duration / duration) * 100;
                        
+                       const isSelected = useTimelineStore.getState().selectedClipId === clip.id;
+                       
                        return (
                          <div key={clip.id} 
-                              className="absolute top-1 bottom-1 bg-primary/20 border border-primary/50 rounded-sm flex items-center px-1 clip-draggable group/clip select-none" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                useTimelineStore.getState().setSelectedClipId(clip.id);
+                              }}
+                              className={`absolute top-1 bottom-1 bg-primary/20 border-2 rounded-sm flex items-center px-1 clip-draggable group/clip select-none cursor-pointer transition-colors ${isSelected ? 'border-primary ring-1 ring-primary' : 'border-primary/50'}`} 
                               style={{ left: `calc(1rem + (100% - 2rem) * (${leftPct} / 100))`, width: `calc((100% - 2rem) * (${widthPct} / 100))` }}
                               onPointerDown={(e) => {
                                 e.stopPropagation();
+                                useTimelineStore.getState().setSelectedClipId(clip.id);
                                 if (!timelineRef.current) return;
                                 const rect = timelineRef.current.getBoundingClientRect();
                                 const padding = 16;
@@ -237,13 +247,12 @@ export function TimelinePlugin() {
                            <select 
                              className="text-[10px] bg-transparent font-medium text-primary outline-none cursor-pointer w-full text-center z-10"
                              value={clip.preset}
-                             onChange={(e) => handlePresetChange(layer.id, clip.id, e.target.value as AnimationPreset)}
+                             onChange={(e) => handlePresetChange(layer.id, clip.id, e.target.value)}
                              onPointerDown={(e) => e.stopPropagation()}
                            >
-                             <option value="fade-in">Fade In</option>
-                             <option value="slide-in">Slide In</option>
-                             <option value="float">Float</option>
-                             <option value="pulse">Pulse</option>
+                             {Object.values(MotionLibrary).map(anim => (
+                               <option key={anim.id} value={anim.id}>{anim.name}</option>
+                             ))}
                            </select>
                          </div>
                        )
