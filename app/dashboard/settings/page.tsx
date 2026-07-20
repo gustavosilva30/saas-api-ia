@@ -132,21 +132,7 @@ export default function SettingsPage() {
                 onChange={(e) => setGoogleKey(e.target.value)}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Usado para análise avançada de campanhas.
-              </p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="banana-key">Banana.dev API Key (Nano Banana)</Label>
-              <Input 
-                id="banana-key" 
-                type="password" 
-                placeholder="b_..." 
-                value={mounted && bananaKey ? bananaKey : ""}
-                onChange={(e) => setBananaKey(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Usado para rodar inferências customizadas de imagem (ex: SDXL) via Serverless.
+                Usado para análise avançada e geração de imagens realistas (Nano Banana).
               </p>
             </div>
           </CardContent>
