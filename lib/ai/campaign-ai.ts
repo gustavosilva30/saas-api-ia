@@ -1,5 +1,4 @@
-// Serviços Mockados para a Fase 8 de Campaign Builder
-// Futuramente, isso se conectará via AIProviderManager (OpenAI/Gemini)
+import { useTenantStore } from "@/store/useTenantStore";
 
 export interface ProductAnalysis {
   category: string;
@@ -24,61 +23,161 @@ export interface CampaignCopy {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// DEV FALLBACK ONLY — nunca usar em produção!
-// Este arquivo foi rebaixado para fallback. Toda a inteligência real roda no backend via Job System (Fase 4).
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      let result = reader.result as string;
+      // Remove o prefixo data:image/jpeg;base64,
+      const base64ContentArray = result.split(",");
+      resolve(base64ContentArray[1] || result);
+    };
+    reader.onerror = error => reject(error);
+  });
+};
+
+// Fallback Mockado caso falhe a chamada ou não tenha chave
+const getMockAnalysis = async (imageFile: File): Promise<ProductAnalysis> => {
+  await delay(1500);
+  const name = imageFile.name.toLowerCase();
+  let category = "Genérico";
+  let bgStyle: ProductAnalysis["recommendedBgStyle"] = "studio_white";
+  
+  if (name.includes("pneu") || name.includes("motor") || name.includes("carro")) {
+    category = "Automotivo"; bgStyle = "industrial";
+  } else if (name.includes("tenis") || name.includes("shoe")) {
+    category = "Calçados"; bgStyle = "lifestyle_outdoor";
+  } else if (name.includes("relogio") || name.includes("watch")) {
+    category = "Acessórios Premium"; bgStyle = "dark_dramatic";
+  }
+
+  return { category, recommendedBgStyle: bgStyle, confidence: 0.94 };
+};
+
+const getMockCopy = async (category: string): Promise<CampaignCopy> => {
+  await delay(2000);
+  return {
+    title: `Lançamento Exclusivo: ${category} Premium`,
+    subtitle: "A qualidade que você já conhece, agora com um design revolucionário.",
+    description: "Desenvolvido com tecnologia de ponta para proporcionar o máximo de desempenho e durabilidade no seu dia a dia. Uma peça fundamental que combina resistência e estilo em um só pacote.",
+    benefits: [
+      "Durabilidade estendida (Garantia de 2 anos)",
+      "Acabamento premium resistente a riscos",
+      "Design ergonômico e moderno",
+      "Alta performance comprovada"
+    ],
+    cta: "Garanta o seu hoje mesmo com frete grátis!",
+    hashtags: "#lancamento #premium #qualidade #oferta #ecommerce",
+    platformSpecific: {
+      instagram: "🔥 A revolução chegou! Arraste para o lado e confira os detalhes deste lançamento incrível. Link na bio para garantir o seu com desconto exclusivo de 15% nas próximas 24h! 🚀👇\n\n#novidade #premium",
+      facebook: "Procurando por qualidade e durabilidade? Nosso novo modelo de categoria premium acaba de chegar no estoque. Aproveite as condições de parcelamento em até 12x sem juros no cartão. Clique em 'Saiba Mais'!",
+      mercadolivre: "PRODUTO NOVO | PRONTA ENTREGA | GARANTIA\n\nCaracterísticas principais:\n- Alta resistência\n- Acabamento profissional\n\n*Envio imediato pelo Mercado Envios Full.*"
+    },
+    seoKeywords: ["comprar online", "melhor preço", "qualidade premium", category.toLowerCase()]
+  };
+};
 
 export const campaignAI = {
-  // Simula a análise visual do produto
   async analyzeProduct(imageFile: File): Promise<ProductAnalysis> {
-    console.warn("DEV FALLBACK ONLY: Usando mock client-side para vision.");
-    await delay(1500); // Simulando delay de rede do modelo de Visão
+    const { googleKey } = useTenantStore.getState();
     
-    // Heurística boba apenas para o mock baseada no nome do arquivo (ou fixo)
-    const name = imageFile.name.toLowerCase();
-    let category = "Genérico";
-    let bgStyle: ProductAnalysis["recommendedBgStyle"] = "studio_white";
-    
-    if (name.includes("pneu") || name.includes("motor") || name.includes("carro")) {
-      category = "Automotivo";
-      bgStyle = "industrial";
-    } else if (name.includes("tenis") || name.includes("shoe")) {
-      category = "Calçados";
-      bgStyle = "lifestyle_outdoor";
-    } else if (name.includes("relogio") || name.includes("watch")) {
-      category = "Acessórios Premium";
-      bgStyle = "dark_dramatic";
+    if (!googleKey) {
+      console.warn("Sem chave do Google configurada. Usando mock.");
+      return getMockAnalysis(imageFile);
     }
 
-    return {
-      category,
-      recommendedBgStyle: bgStyle,
-      confidence: 0.94
-    };
+    try {
+      const base64Data = await fileToBase64(imageFile);
+      const mimeType = imageFile.type || "image/jpeg";
+
+      const prompt = `Analise a imagem em anexo. 
+      Responda EXATAMENTE em formato JSON com as seguintes chaves:
+      "category": string curta descrevendo a categoria exata do produto.
+      "recommendedBgStyle": uma destas opções exatas: "studio_white", "dark_dramatic", "lifestyle_outdoor", "industrial" (escolha a que mais combina).
+      "confidence": número decimal entre 0 e 1 indicando sua certeza.
+      NÃO RETORNE NADA ALÉM DO JSON.`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${googleKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType, data: base64Data } }
+            ]
+          }]
+        })
+      });
+
+      if (!response.ok) throw new Error("Falha na chamada da API Vision do Gemini");
+      
+      const data = await response.json();
+      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const jsonStr = textResponse.replace(/```json/g, "").replace(/```/g, "").trim();
+      const parsed = JSON.parse(jsonStr) as ProductAnalysis;
+      
+      return parsed;
+
+    } catch (error) {
+      console.error("Erro na API real do Gemini (Vision), usando fallback", error);
+      return getMockAnalysis(imageFile);
+    }
   },
 
-  // Simula a geração de copy baseada na categoria do produto
   async generateCopywriting(category: string): Promise<CampaignCopy> {
-    console.warn("DEV FALLBACK ONLY: Usando mock client-side para copy.");
-    await delay(2000); // Simula delay do LLM
+    const { googleKey } = useTenantStore.getState();
 
-    return {
-      title: `Lançamento Exclusivo: ${category} Premium`,
-      subtitle: "A qualidade que você já conhece, agora com um design revolucionário.",
-      description: "Desenvolvido com tecnologia de ponta para proporcionar o máximo de desempenho e durabilidade no seu dia a dia. Uma peça fundamental que combina resistência e estilo em um só pacote.",
-      benefits: [
-        "Durabilidade estendida (Garantia de 2 anos)",
-        "Acabamento premium resistente a riscos",
-        "Design ergonômico e moderno",
-        "Alta performance comprovada"
-      ],
-      cta: "Garanta o seu hoje mesmo com frete grátis!",
-      hashtags: "#lancamento #premium #qualidade #oferta #ecommerce",
-      platformSpecific: {
-        instagram: "🔥 A revolução chegou! Arraste para o lado e confira os detalhes deste lançamento incrível. Link na bio para garantir o seu com desconto exclusivo de 15% nas próximas 24h! 🚀👇\n\n#novidade #premium",
-        facebook: "Procurando por qualidade e durabilidade? Nosso novo modelo de categoria premium acaba de chegar no estoque. Aproveite as condições de parcelamento em até 12x sem juros no cartão. Clique em 'Saiba Mais'!",
-        mercadolivre: "PRODUTO NOVO | PRONTA ENTREGA | GARANTIA\n\nCaracterísticas principais:\n- Alta resistência\n- Acabamento profissional\n\n*Envio imediato pelo Mercado Envios Full.*"
-      },
-      seoKeywords: ["comprar online", "melhor preço", "qualidade premium", category.toLowerCase()]
-    };
+    if (!googleKey) {
+      console.warn("Sem chave do Google configurada. Usando mock.");
+      return getMockCopy(category);
+    }
+
+    try {
+      const prompt = `Você é um copywriter especialista de alta conversão.
+      Crie uma estrutura de vendas (Copywriting) para um produto da categoria "${category}".
+      
+      Responda EXATAMENTE em formato JSON puro, seguindo este formato rigorosamente:
+      {
+        "title": "título curto e de impacto (máx 5 palavras)",
+        "subtitle": "subtítulo complementar com gatilho mental",
+        "description": "parágrafo descritivo de 3-4 linhas",
+        "benefits": ["benefício 1", "benefício 2", "benefício 3", "benefício 4"],
+        "cta": "texto de chamada para ação",
+        "hashtags": "#hashtag1 #hashtag2 #hashtag3",
+        "platformSpecific": {
+          "instagram": "texto com emojis e call to action para bio/link",
+          "mercadolivre": "texto mais direto, enfatizando pronta entrega, envio, novo",
+          "facebook": "texto descritivo para topo ou meio de funil com CTA"
+        },
+        "seoKeywords": ["keyword1", "keyword2", "keyword3"]
+      }
+      
+      IMPORTANTE: Retorne APENAS o JSON válido.`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${googleKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }]
+        })
+      });
+
+      if (!response.ok) throw new Error("Falha na chamada da API de texto do Gemini");
+      
+      const data = await response.json();
+      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const jsonStr = textResponse.replace(/```json/g, "").replace(/```/g, "").trim();
+      const parsed = JSON.parse(jsonStr) as CampaignCopy;
+      
+      return parsed;
+
+    } catch (error) {
+      console.error("Erro na API real do Gemini (Copy), usando fallback", error);
+      return getMockCopy(category);
+    }
   }
 };
