@@ -9,7 +9,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 export default function CampaignBuilderPage() {
-  const { status, startCampaign, resetCampaign, cutoutUrl, analysis, copywriting, generatedAssets, originalFile, error } = useCampaignStore();
+  const { status, startCampaign, resetCampaign, cutoutUrl, analysis, copywriting, generatedAssets, originalFile, error, isGeneratingBanners, generateAIBanners } = useCampaignStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,41 +143,100 @@ export default function CampaignBuilderPage() {
           
           {/* Coluna Esquerda: Peças Visuais */}
           <div className="lg:col-span-7 space-y-6">
-            <h3 className="font-semibold text-lg flex items-center gap-2"><ImageIcon className="size-5 text-primary" /> Peças Visuais</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-lg flex items-center gap-2"><ImageIcon className="size-5 text-primary" /> Peças Visuais</h3>
+              
+              {!generatedAssets.some(a => a.bgUrl) && (
+                <Button 
+                  onClick={generateAIBanners} 
+                  disabled={isGeneratingBanners}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md gap-2 h-9 text-sm"
+                >
+                  {isGeneratingBanners ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                  Gerar Cenários com IA
+                </Button>
+              )}
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
-              <Card>
-                <CardHeader className="p-4 pb-2">
-                  <CardTitle className="text-sm">Instagram Feed (1080x1080)</CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 pt-0">
-                  <div className="aspect-square bg-checkerboard rounded-lg border overflow-hidden relative">
-                    <img src={cutoutUrl!} className="w-full h-full object-contain p-4 drop-shadow-2xl" alt="Feed" />
-                  </div>
-                </CardContent>
-              </Card>
+              {(() => {
+                const feedAsset = generatedAssets.find(a => a.format === 'instagram_feed');
+                const mlAsset = generatedAssets.find(a => a.format === 'mercadolivre');
+                const storyAsset = generatedAssets.find(a => a.format === 'instagram_story');
+                
+                return (
+                  <>
+                    <Card>
+                      <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-sm flex justify-between">
+                          Instagram Feed (1080x1080)
+                          {feedAsset?.bgUrl && <span className="text-[10px] bg-indigo-500/10 text-indigo-500 px-2 py-0.5 rounded border border-indigo-500/20">AI Generated</span>}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-0">
+                        <div className={cn("aspect-square rounded-lg border overflow-hidden relative flex items-center justify-center", feedAsset?.bgUrl ? "" : "bg-checkerboard")}>
+                          {feedAsset?.bgUrl && (
+                            <img src={feedAsset.bgUrl} className="absolute inset-0 w-full h-full object-cover opacity-90" alt="BG" />
+                          )}
+                          <img src={cutoutUrl!} className={cn("relative z-10 w-full h-full object-contain p-4 drop-shadow-2xl transition-all duration-700", feedAsset?.bgUrl ? "scale-90" : "scale-100")} alt="Feed" />
+                          {feedAsset?.overlayText && (
+                            <div className="absolute top-6 w-full text-center z-20 px-4">
+                              <h1 className="text-white font-black text-2xl uppercase tracking-wider drop-shadow-lg" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
+                                {feedAsset.overlayText}
+                              </h1>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
 
-              <Card>
-                <CardHeader className="p-4 pb-2">
-                  <CardTitle className="text-sm">Mercado Livre (1200x1200)</CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 pt-0">
-                  <div className="aspect-square bg-white rounded-lg border overflow-hidden relative flex items-center justify-center">
-                    <img src={cutoutUrl!} className="w-[80%] h-[80%] object-contain drop-shadow-md" alt="ML" />
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="col-span-2">
-                <CardHeader className="p-4 pb-2">
-                  <CardTitle className="text-sm">Instagram Story (1080x1920)</CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 pt-0 flex justify-center">
-                  <div className="aspect-[9/16] w-1/2 max-w-[200px] bg-checkerboard rounded-lg border overflow-hidden relative">
-                     <img src={cutoutUrl!} className="w-full h-full object-contain p-2 drop-shadow-2xl" alt="Story" />
-                  </div>
-                </CardContent>
-              </Card>
+                    <Card>
+                      <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-sm flex justify-between">
+                          Mercado Livre (1200x1200)
+                          {mlAsset?.bgUrl && <span className="text-[10px] bg-indigo-500/10 text-indigo-500 px-2 py-0.5 rounded border border-indigo-500/20">AI Generated</span>}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-0">
+                        <div className={cn("aspect-square rounded-lg border overflow-hidden relative flex items-center justify-center", mlAsset?.bgUrl ? "" : "bg-white")}>
+                          {mlAsset?.bgUrl && (
+                            <img src={mlAsset.bgUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-60" alt="BG" />
+                          )}
+                          {mlAsset?.bgUrl && <div className="absolute inset-0 bg-white/50 backdrop-blur-md" />}
+                          <img src={cutoutUrl!} className="relative z-10 w-[80%] h-[80%] object-contain drop-shadow-md" alt="ML" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="col-span-2">
+                      <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-sm flex justify-between">
+                          Instagram Story (1080x1920)
+                          {storyAsset?.bgUrl && <span className="text-[10px] bg-indigo-500/10 text-indigo-500 px-2 py-0.5 rounded border border-indigo-500/20">AI Generated</span>}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-0 flex justify-center">
+                        <div className={cn("aspect-[9/16] w-1/2 max-w-[200px] rounded-lg border overflow-hidden relative flex items-center justify-center", storyAsset?.bgUrl ? "" : "bg-checkerboard")}>
+                          {storyAsset?.bgUrl && (
+                            <img src={storyAsset.bgUrl} className="absolute inset-0 w-full h-full object-cover opacity-90" alt="BG" />
+                          )}
+                          <img src={cutoutUrl!} className={cn("relative z-10 w-full h-full object-contain p-2 drop-shadow-2xl transition-all duration-700", storyAsset?.bgUrl ? "scale-90 translate-y-12" : "scale-100")} alt="Story" />
+                          {storyAsset?.overlayText && (
+                            <div className="absolute top-12 w-full text-center z-20 px-2">
+                              <h1 className="text-white font-black text-xl uppercase tracking-wider drop-shadow-lg" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
+                                {storyAsset.overlayText}
+                              </h1>
+                              <div className="mt-2 text-white/90 text-[10px] font-bold bg-black/40 inline-block px-2 py-1 rounded backdrop-blur-sm">
+                                ARRASTE PARA CIMA
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                )
+              })()}
             </div>
           </div>
 

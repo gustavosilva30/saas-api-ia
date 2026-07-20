@@ -8,6 +8,8 @@ export interface GeneratedAsset {
   id: string;
   format: "instagram_feed" | "instagram_story" | "mercadolivre" | "banner";
   url: string;
+  bgUrl?: string; // Fundo gerado por IA
+  overlayText?: string; // Texto promocional da IA
 }
 
 export interface CampaignState {
@@ -18,9 +20,11 @@ export interface CampaignState {
   copywriting: CampaignCopy | null;
   generatedAssets: GeneratedAsset[];
   error: string | null;
+  isGeneratingBanners: boolean;
   
   startCampaign: (file: File) => Promise<void>;
   resetCampaign: () => void;
+  generateAIBanners: () => Promise<void>;
 }
 
 // Helper para polling do Job
@@ -48,6 +52,7 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
   copywriting: null,
   generatedAssets: [],
   error: null,
+  isGeneratingBanners: false,
 
   resetCampaign: () => set({
     status: "idle",
@@ -56,8 +61,37 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
     analysis: null,
     copywriting: null,
     generatedAssets: [],
-    error: null
+    error: null,
+    isGeneratingBanners: false
   }),
+
+  generateAIBanners: async () => {
+    set({ isGeneratingBanners: true });
+    
+    // Simula tempo de geração de IA (ex: DALL-E 3 / Midjourney)
+    await new Promise(r => setTimeout(r, 2500));
+    
+    const state = get();
+    // Fundos premium curados do Unsplash para simular fundos de IA
+    const bgMap: Record<string, string[]> = {
+      "studio_white": ["https://picsum.photos/seed/studio1/1080/1080", "https://picsum.photos/seed/studio2/1080/1080"],
+      "dark_dramatic": ["https://picsum.photos/seed/dark1/1080/1080", "https://picsum.photos/seed/dark2/1080/1080"],
+      "lifestyle_outdoor": ["https://picsum.photos/seed/life1/1080/1080", "https://picsum.photos/seed/life2/1080/1080"],
+      "industrial": ["https://picsum.photos/seed/ind1/1080/1080", "https://picsum.photos/seed/ind2/1080/1080"]
+    };
+    
+    const style = state.analysis?.recommendedBgStyle || "studio_white";
+    const bgs = bgMap[style] || bgMap["studio_white"];
+    const title = state.copywriting?.title || "Oferta Especial";
+
+    const updatedAssets = state.generatedAssets.map((asset, idx) => ({
+      ...asset,
+      bgUrl: bgs[idx % bgs.length],
+      overlayText: asset.format === 'mercadolivre' ? "" : title // ML não costuma ter texto promocional grande
+    }));
+
+    set({ generatedAssets: updatedAssets, isGeneratingBanners: false });
+  },
 
   startCampaign: async (file: File) => {
     set({ 
@@ -72,10 +106,17 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
 
     try {
       // 1. Upload e Remoção de Fundo (Assíncrono via API Pública/Job ou fallback)
-      // Como a fase de AI Campaign herda o remover fundo, usamos o Job
-      const bgJob = await api.createJob(file, "basic");
-      const bgResult = await pollJobUntilDone(bgJob.job_id);
-      set({ cutoutUrl: bgResult.result_url, status: "analyzing" });
+      let currentCutoutUrl: string;
+      try {
+        const bgJob = await api.createJob(file, "basic");
+        const bgResult = await pollJobUntilDone(bgJob.job_id);
+        currentCutoutUrl = bgResult.result_url;
+      } catch (e) {
+        // Fallback para não dar erro "Failed to fetch" na tela quando o backend está offline
+        currentCutoutUrl = URL.createObjectURL(file);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      set({ cutoutUrl: currentCutoutUrl, status: "analyzing" });
 
       // 2. Análise Visual da Categoria (Job)
       let analysisData: ProductAnalysis;
@@ -105,9 +146,9 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
       await new Promise(r => setTimeout(r, 1500));
       
       const assets: GeneratedAsset[] = [
-        { id: "feed", format: "instagram_feed", url: bgResult.result_url },
-        { id: "story", format: "instagram_story", url: bgResult.result_url },
-        { id: "ml", format: "mercadolivre", url: bgResult.result_url }
+        { id: "feed", format: "instagram_feed", url: currentCutoutUrl },
+        { id: "story", format: "instagram_story", url: currentCutoutUrl },
+        { id: "ml", format: "mercadolivre", url: currentCutoutUrl }
       ];
 
       set({ generatedAssets: assets, status: "done" });

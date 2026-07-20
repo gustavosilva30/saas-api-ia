@@ -96,11 +96,9 @@ export default function ApiKeysPage() {
           description="Gerencie suas chaves de acesso para integração via API."
         />
         <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Chave API
-            </Button>
+          <DialogTrigger render={<Button />}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nova Chave API
           </DialogTrigger>
           <DialogContent>
             {generatedKey ? (
