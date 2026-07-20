@@ -91,7 +91,7 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
         console.log("Acionando Nano Banana (Gemini Image) no Google AI Studio...");
         
         const prompt = `A highly aesthetic, professional studio photography background designed for a ${title} (Category: ${style}). 
-    ${userPrompt ? `User instructions: ${userPrompt}.` : ""}
+    ${state.userPrompt ? `User instructions: ${state.userPrompt}.` : ""}
     It should be clean, with perfect studio lighting, soft shadows, and a premium vibe. 
     Do NOT include the product itself, just the empty setting ready for the product to be placed. 
     No text, no watermarks, completely photorealistic and highly detailed. 8k resolution, award winning photography.`;
