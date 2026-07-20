@@ -16,7 +16,12 @@ interface AssetGridProps {
 }
 
 export function AssetGrid({ category, searchQuery, onSelectAsset, selectedAssetId }: AssetGridProps) {
-  const assets = useAssetStore(state => state.getAssetsByCategory(category, searchQuery));
+  const allAssets = useAssetStore(state => state.assets);
+  const assets = allAssets.filter(a => {
+    const matchCategory = category === "all" ? true : a.categories.includes(category);
+    const matchSearch = a.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchCategory && matchSearch;
+  });
 
   const handleDragStart = (e: React.DragEvent, url: string) => {
     e.dataTransfer.setData("text/plain", url);

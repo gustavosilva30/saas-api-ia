@@ -1,26 +1,29 @@
 import { create } from "zustand";
 import { AssetItem, AssetCategory } from "@/lib/studio/assets/AssetTypes";
 
+// Usando datas fixas para evitar Erro de Hydration (Error 418) entre Servidor e Cliente
+const FIXED_DATE = "2024-01-01T00:00:00.000Z";
+
 const PREMIUM_MOCK_ASSETS: AssetItem[] = [
   { 
     id: "m1", url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=600&auto=format&fit=crop", 
     category: "mockups", categories: ["mockups", "all"], name: "Tênis Esportivo Nike", type: "image",
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), usageCount: 0, status: "active", permission: "public"
+    createdAt: FIXED_DATE, updatedAt: FIXED_DATE, usageCount: 0, status: "active", permission: "public"
   },
   { 
     id: "m2", url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop", 
     category: "mockups", categories: ["mockups", "all"], name: "Headphone Premium", type: "image",
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), usageCount: 0, status: "active", permission: "public"
+    createdAt: FIXED_DATE, updatedAt: FIXED_DATE, usageCount: 0, status: "active", permission: "public"
   },
   { 
     id: "t1", url: "https://images.unsplash.com/photo-1603533867307-b354255e3c32?q=80&w=600&auto=format&fit=crop", 
     category: "textures", categories: ["textures", "all"], name: "Papel Amassado Dark", type: "image",
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), usageCount: 0, status: "active", permission: "public"
+    createdAt: FIXED_DATE, updatedAt: FIXED_DATE, usageCount: 0, status: "active", permission: "public"
   },
   { 
     id: "l1", url: "https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?q=80&w=400&auto=format&fit=crop", 
     category: "logos", categories: ["logos", "all"], name: "Logo Minimalista", type: "image",
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), usageCount: 0, status: "active", permission: "public"
+    createdAt: FIXED_DATE, updatedAt: FIXED_DATE, usageCount: 0, status: "active", permission: "public"
   },
 ];
 

@@ -46,7 +46,7 @@ export function AssetsManagerSidebar() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const { addAsset } = useAssetStore();
+  const addAsset = useAssetStore(state => state.addAsset);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
