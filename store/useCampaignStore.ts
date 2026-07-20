@@ -69,39 +69,61 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
   generateAIBanners: async () => {
     set({ isGeneratingBanners: true });
     const state = get();
-    const { bananaKey } = useTenantStore.getState();
+    const { googleKey } = useTenantStore.getState();
     const style = state.analysis?.recommendedBgStyle || "studio_white";
     const title = state.copywriting?.title || "Oferta Especial";
+    const categoryName = state.analysis?.category || "product";
 
-    let bananaGeneratedUrls: string[] = [];
+    let aiGeneratedBg = "";
     
-    // Tenta gerar imagem no Banana.dev se a chave existir
-    if (bananaKey) {
+    // Tenta gerar imagem no Google Gemini (Nano Banana) se a chave existir
+    if (googleKey) {
       try {
-        console.log("Acionando inferência Serverless via Banana.dev...");
-        // Simulando a chamada ao Banana API (o endpoint requer Model Key que não temos ainda)
-        // const res = await fetch("https://api.banana.dev/start/v4/", { ... });
-        await new Promise(r => setTimeout(r, 4000));
+        console.log("Acionando Nano Banana (Gemini Image) no Google AI Studio...");
         
-        // Em um cenário real o Banana retornaria uma base64 da imagem gerada pelo Stable Diffusion.
-        // Simulamos o sucesso gerando URLs ricas e diferentes para mostrar que funcionou a "inferência".
-        bananaGeneratedUrls = [
-          `https://picsum.photos/seed/${Date.now()}_1/1080/1080`,
-          `https://picsum.photos/seed/${Date.now()}_2/1080/1080`,
-          `https://picsum.photos/seed/${Date.now()}_3/1080/1080`
-        ];
-        console.log("Banana.dev: Inferência concluída com sucesso!");
+        const prompt = `A highly aesthetic, professional studio photography background designed for a ${categoryName} advertisement. Style: ${style}. Clean, photorealistic, empty center space for product placement, highly detailed, visually stunning, no text, no watermarks, 8k resolution.`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${googleKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: prompt }]
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Falha Gemini Image: ${errText}`);
+        }
+
+        const data = await response.json();
+        // A API de imagem do Gemini retorna um base64 (geralmente em candidates -> content -> parts -> inlineData -> data)
+        // Se usar imagen-3.0, seria predictions[0].bytesBase64Encoded.
+        // Vamos tentar os dois formatos mais comuns.
+        const base64Image = 
+          data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || 
+          data.predictions?.[0]?.bytesBase64Encoded;
+
+        if (base64Image) {
+          const mimeType = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || "image/jpeg";
+          aiGeneratedBg = `data:${mimeType};base64,${base64Image}`;
+          console.log("Nano Banana (Gemini Image): Imagem gerada com sucesso!");
+        } else {
+          throw new Error("Resposta da API não continha os dados da imagem em base64.");
+        }
       } catch (err) {
-        console.error("Erro na geração via Banana.dev, usando fallback", err);
+        console.error("Erro na geração via Gemini Image, acionando fallback de segurança", err);
       }
     }
 
-    if (!bananaKey || bananaGeneratedUrls.length === 0) {
-      // Simula tempo de geração caso não tenha chave
+    if (!googleKey || !aiGeneratedBg) {
+      // Simula tempo de geração caso não tenha chave ou tenha dado erro
       await new Promise(r => setTimeout(r, 2500));
     }
     
-    // Fundos premium curados do Unsplash para simular fundos de IA
+    // Fundos premium curados para simular fundos de IA caso dê erro na chamada
     const bgMap: Record<string, string[]> = {
       "studio_white": ["https://picsum.photos/seed/studio1/1080/1080", "https://picsum.photos/seed/studio2/1080/1080"],
       "dark_dramatic": ["https://picsum.photos/seed/dark1/1080/1080", "https://picsum.photos/seed/dark2/1080/1080"],
@@ -109,12 +131,13 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
       "industrial": ["https://picsum.photos/seed/ind1/1080/1080", "https://picsum.photos/seed/ind2/1080/1080"]
     };
     
-    const bgs = bananaGeneratedUrls.length > 0 ? bananaGeneratedUrls : (bgMap[style] || bgMap["studio_white"]);
+    // Usa a imagem gerada pela IA, se existir. Se não, usa o fallback.
+    const bgs = aiGeneratedBg ? [aiGeneratedBg] : (bgMap[style] || bgMap["studio_white"]);
 
     const updatedAssets = state.generatedAssets.map((asset, idx) => ({
       ...asset,
       bgUrl: bgs[idx % bgs.length],
-      overlayText: asset.format === 'mercadolivre' ? "" : title // ML não costuma ter texto promocional grande
+      overlayText: asset.format === 'mercadolivre' ? "" : title
     }));
 
     set({ generatedAssets: updatedAssets, isGeneratingBanners: false });
