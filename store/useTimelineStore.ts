@@ -15,6 +15,8 @@ export interface AnimationClip {
 
 export interface AnimationTrack {
   layerId: string;
+  mediaStart: number;
+  mediaDuration: number;
   clips: AnimationClip[];
 }
 
@@ -38,6 +40,7 @@ interface TimelineState {
   addClip: (layerId: string, clip: AnimationClip) => void;
   removeClip: (layerId: string, clipId: string) => void;
   updateClip: (layerId: string, clipId: string, updates: Partial<AnimationClip>) => void;
+  setTrackMedia: (layerId: string, start: number, duration: number) => void;
   clearTracks: () => void;
 }
 
@@ -117,7 +120,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
     },
     
     addClip: (layerId, clip) => set((state) => {
-      const track = state.tracks[layerId] || { layerId, clips: [] };
+      const track = state.tracks[layerId] || { layerId, mediaStart: 0, mediaDuration: state.duration, clips: [] };
       return {
         tracks: {
           ...state.tracks,
@@ -147,6 +150,16 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
             ...track,
             clips: track.clips.map(c => c.id === clipId ? { ...c, ...updates } : c)
           }
+        }
+      };
+    }),
+    
+    setTrackMedia: (layerId, start, duration) => set((state) => {
+      const track = state.tracks[layerId] || { layerId, clips: [] };
+      return {
+        tracks: {
+          ...state.tracks,
+          [layerId]: { ...track, mediaStart: start, mediaDuration: duration }
         }
       };
     }),

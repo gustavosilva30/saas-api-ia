@@ -115,8 +115,8 @@ export class MotionEngine {
     this.animatedLayers.forEach((baseState, layerId) => {
       const track = tracks[layerId];
       
-      // Se não houver track ou clips, reseta para o base state
-      if (!track || track.clips.length === 0) {
+      // Se não houver track, mantém o estado base
+      if (!track) {
         this.renderEngine!.updateObjectProperties(layerId, {
           top: baseState.startY,
           left: baseState.startX,
@@ -128,39 +128,59 @@ export class MotionEngine {
         return;
       }
 
-      // Encontra o clip ativo ou o mais recente
+      // 1. Verifica Visibilidade da Camada (Media Clip)
+      // Se estiver fora do tempo de vida da imagem, esconde ela completamente
+      if (currentTime < track.mediaStart || currentTime > track.mediaStart + track.mediaDuration) {
+        this.renderEngine!.updateObjectProperties(layerId, {
+          opacity: 0
+        });
+        hasUpdates = true;
+        return;
+      }
+
+      // Se não houver animações na trilha, apenas mantém visível no estado base
+      if (track.clips.length === 0) {
+        this.renderEngine!.updateObjectProperties(layerId, {
+          top: baseState.startY,
+          left: baseState.startX,
+          opacity: baseState.startOpacity,
+          scaleX: baseState.startScaleX,
+          scaleY: baseState.startScaleY,
+        });
+        hasUpdates = true;
+        return;
+      }
+
+      // 2. Resolve Animações (Clips)
       let activeClip = track.clips.find(c => currentTime >= c.startTime && currentTime <= c.startTime + c.duration);
       let isAfter = false;
       let isBefore = false;
 
       if (!activeClip) {
-        // Verifica se passou de todos os clips
         const lastClip = track.clips[track.clips.length - 1];
         if (currentTime > lastClip.startTime + lastClip.duration) {
           activeClip = lastClip;
           isAfter = true;
         } else {
-          // Antes do primeiro clip
           activeClip = track.clips[0];
           isBefore = true;
         }
       }
 
-      // Values to apply to Canvas
+      // Base values
       let props: Record<string, number> = {
         top: baseState.startY,
         left: baseState.startX,
         opacity: baseState.startOpacity,
         scaleX: baseState.startScaleX,
         scaleY: baseState.startScaleY,
-        angle: 0 // angle missing in BaseState but we can animate it
+        angle: 0
       };
 
       const { preset, startTime, duration, easing, delay = 0, loop = false, pingPong = false } = activeClip;
       
       const animDef = MotionLibrary[preset];
       if (animDef) {
-        // Adjust for delay
         const actualStartTime = startTime + delay;
         const actualDuration = duration;
         
@@ -175,13 +195,12 @@ export class MotionEngine {
           progress = Math.max(0, Math.min(progress, 1));
         }
 
-        if (loop) {
+        if (loop && currentTime >= actualStartTime && currentTime <= actualStartTime + actualDuration) {
           progress = ((currentTime - actualStartTime) % actualDuration) / actualDuration;
           if (progress < 0) progress = 0;
         }
 
         if (pingPong) {
-          // 0 to 1 to 0
           progress = progress <= 0.5 ? progress * 2 : 2 - (progress * 2);
         }
 

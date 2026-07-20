@@ -52,9 +52,12 @@ export const useStudioStore = create<StudioState>((set) => {
   
   EventBus.on(StudioEvent.OBJECT_ADDED, (obj: any) => {
     if (obj && obj.id) {
-      set((state) => ({
-        layers: [...state.layers, { id: obj.id, name: obj.name || obj.type || 'Layer', type: obj.type || 'Object' }]
-      }))
+      set((state) => {
+        if (state.layers.some(l => l.id === obj.id)) return state;
+        return {
+          layers: [...state.layers, { id: obj.id, name: obj.name || obj.type || 'Layer', type: obj.type || 'Object' }]
+        };
+      })
     }
   })
 

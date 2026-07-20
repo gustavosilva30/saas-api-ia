@@ -8,7 +8,7 @@ import { useStudioStore } from "@/store/useStudioStore"
 import { MotionLibrary } from "@/lib/studio/engine/MotionLibrary"
 
 export function TimelinePlugin() {
-  const { currentTime, duration, isPlaying, play, pause, seek, tracks, addClip, updateClip } = useTimelineStore();
+  const { currentTime, duration, isPlaying, play, pause, seek, tracks, addClip, updateClip, setTrackMedia } = useTimelineStore();
   const { layers } = useStudioStore();
   const timelineRef = useRef<HTMLDivElement>(null);
   
@@ -37,6 +37,10 @@ export function TimelinePlugin() {
 
   const handlePresetChange = (layerId: string, clipId: string, preset: string) => {
     updateClip(layerId, clipId, { preset });
+  };
+
+  const handleMediaChange = (layerId: string, mediaStart: number, mediaDuration: number) => {
+    setTrackMedia(layerId, mediaStart, mediaDuration);
   };
 
   const handleAutoAnimate = () => {
@@ -242,80 +246,137 @@ export function TimelinePlugin() {
 
              {layers.map((layer) => {
                 const track = tracks[layer.id];
+                const mediaStart = track?.mediaStart ?? 0;
+                const mediaDuration = track?.mediaDuration ?? duration;
+                
+                const mediaLeftPct = (mediaStart / duration) * 100;
+                const mediaWidthPct = (mediaDuration / duration) * 100;
+                
                 return (
                   <div key={layer.id} className="h-10 border-b relative group">
-                    {track && track.clips.map(clip => {
-                       const leftPct = (clip.startTime / duration) * 100;
-                       const widthPct = (clip.duration / duration) * 100;
-                       
-                       const isSelected = useTimelineStore.getState().selectedClipId === clip.id;
-                       
-                       return (
-                         <div key={clip.id} 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                useTimelineStore.getState().setSelectedClipId(clip.id);
-                              }}
-                              className={`absolute top-1 bottom-1 bg-primary/20 border-2 rounded-sm flex items-center px-1 clip-draggable group/clip select-none cursor-pointer transition-colors ${isSelected ? 'border-primary ring-1 ring-primary' : 'border-primary/50'}`} 
-                              style={{ left: `calc(1rem + (100% - 2rem) * (${leftPct} / 100))`, width: `calc((100% - 2rem) * (${widthPct} / 100))` }}
-                              onPointerDown={(e) => {
-                                e.stopPropagation();
-                                useTimelineStore.getState().setSelectedClipId(clip.id);
-                                if (!timelineRef.current) return;
-                                const rect = timelineRef.current.getBoundingClientRect();
-                                const padding = 16;
-                                const trackWidth = rect.width - (padding * 2);
-                                const msPerPixel = duration / trackWidth;
-                                
-                                const isResizingRight = e.nativeEvent.offsetX > (e.currentTarget.offsetWidth - 10);
-                                const isResizingLeft = e.nativeEvent.offsetX < 10;
-                                
-                                const startX = e.clientX;
-                                const initialStartTime = clip.startTime;
-                                const initialDuration = clip.duration;
-                                
-                                const onMove = (moveEvt: PointerEvent) => {
-                                  const deltaX = moveEvt.clientX - startX;
-                                  const deltaMs = deltaX * msPerPixel;
+                    {/* Media Clip (Bloco Principal da Imagem/Layer) */}
+                    <div 
+                      className="absolute top-1 bottom-1 bg-blue-500/20 border border-blue-500/50 rounded-md clip-draggable group/media cursor-pointer transition-colors hover:bg-blue-500/30 overflow-hidden"
+                      style={{ left: `calc(1rem + (100% - 2rem) * (${mediaLeftPct} / 100))`, width: `calc((100% - 2rem) * (${mediaWidthPct} / 100))` }}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        if (!timelineRef.current) return;
+                        const rect = timelineRef.current.getBoundingClientRect();
+                        const padding = 16;
+                        const trackWidth = rect.width - (padding * 2);
+                        const msPerPixel = duration / trackWidth;
+                        
+                        const isResizingRight = e.nativeEvent.offsetX > (e.currentTarget.offsetWidth - 10);
+                        const isResizingLeft = e.nativeEvent.offsetX < 10;
+                        
+                        const startX = e.clientX;
+                        const initialStartTime = mediaStart;
+                        const initialDuration = mediaDuration;
+                        
+                        const onMove = (moveEvt: PointerEvent) => {
+                          const deltaX = moveEvt.clientX - startX;
+                          const deltaMs = deltaX * msPerPixel;
+                          
+                          if (isResizingRight) {
+                            handleMediaChange(layer.id, initialStartTime, Math.max(100, initialDuration + deltaMs));
+                          } else if (isResizingLeft) {
+                            const newStart = Math.max(0, initialStartTime + deltaMs);
+                            const newDuration = Math.max(100, initialDuration - (newStart - initialStartTime));
+                            handleMediaChange(layer.id, newStart, newDuration);
+                          } else {
+                            // Move
+                            handleMediaChange(layer.id, Math.max(0, initialStartTime + deltaMs), initialDuration);
+                          }
+                        };
+                        
+                        const onUp = () => {
+                          window.removeEventListener("pointermove", onMove);
+                          window.removeEventListener("pointerup", onUp);
+                        };
+                        
+                        window.addEventListener("pointermove", onMove);
+                        window.addEventListener("pointerup", onUp);
+                      }}
+                    >
+                      <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover/media:opacity-100 hover:bg-blue-500/50 z-20" />
+                      <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover/media:opacity-100 hover:bg-blue-500/50 z-20" />
+                      
+                      {/* Clips de Animação Internos */}
+                      {track && track.clips.map(clip => {
+                         // O clip agora é renderizado relativamente ao Media Clip
+                         const clipLeftPct = ((clip.startTime - mediaStart) / mediaDuration) * 100;
+                         const clipWidthPct = (clip.duration / mediaDuration) * 100;
+                         
+                         const isSelected = useTimelineStore.getState().selectedClipId === clip.id;
+                         
+                         return (
+                           <div key={clip.id} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  useTimelineStore.getState().setSelectedClipId(clip.id);
+                                }}
+                                className={`absolute top-0 bottom-0 bg-primary/40 border rounded-sm flex items-center px-1 clip-draggable group/clip select-none cursor-pointer transition-colors z-10 ${isSelected ? 'border-primary ring-1 ring-primary' : 'border-primary/50'}`} 
+                                style={{ left: `${clipLeftPct}%`, width: `${clipWidthPct}%` }}
+                                onPointerDown={(e) => {
+                                  e.stopPropagation();
+                                  useTimelineStore.getState().setSelectedClipId(clip.id);
+                                  if (!timelineRef.current) return;
+                                  const rect = timelineRef.current.getBoundingClientRect();
+                                  const padding = 16;
+                                  const trackWidth = rect.width - (padding * 2);
+                                  const msPerPixel = duration / trackWidth;
                                   
-                                  if (isResizingRight) {
-                                    updateClip(layer.id, clip.id, { duration: Math.max(100, initialDuration + deltaMs) });
-                                  } else if (isResizingLeft) {
-                                    const newStart = Math.max(0, initialStartTime + deltaMs);
-                                    const newDuration = Math.max(100, initialDuration - (newStart - initialStartTime));
-                                    updateClip(layer.id, clip.id, { startTime: newStart, duration: newDuration });
-                                  } else {
-                                    // Move
-                                    updateClip(layer.id, clip.id, { startTime: Math.max(0, initialStartTime + deltaMs) });
-                                  }
-                                };
-                                
-                                const onUp = () => {
-                                  window.removeEventListener("pointermove", onMove);
-                                  window.removeEventListener("pointerup", onUp);
-                                };
-                                
-                                window.addEventListener("pointermove", onMove);
-                                window.addEventListener("pointerup", onUp);
-                              }}
-                          >
-                           {/* Drag handle (esquerda e direita) visual */}
-                           <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover/clip:opacity-100 hover:bg-primary/50" />
-                           <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover/clip:opacity-100 hover:bg-primary/50" />
-                           
-                           <select 
-                             className="text-[10px] bg-transparent font-medium text-primary outline-none cursor-pointer w-full text-center z-10"
-                             value={clip.preset}
-                             onChange={(e) => handlePresetChange(layer.id, clip.id, e.target.value)}
-                             onPointerDown={(e) => e.stopPropagation()}
-                           >
-                             {Object.values(MotionLibrary).map(anim => (
-                               <option key={anim.id} value={anim.id}>{anim.name}</option>
-                             ))}
-                           </select>
-                         </div>
-                       )
-                    })}
+                                  const isResizingRight = e.nativeEvent.offsetX > (e.currentTarget.offsetWidth - 10);
+                                  const isResizingLeft = e.nativeEvent.offsetX < 10;
+                                  
+                                  const startX = e.clientX;
+                                  const initialStartTime = clip.startTime;
+                                  const initialDuration = clip.duration;
+                                  
+                                  const onMove = (moveEvt: PointerEvent) => {
+                                    const deltaX = moveEvt.clientX - startX;
+                                    const deltaMs = deltaX * msPerPixel;
+                                    
+                                    if (isResizingRight) {
+                                      updateClip(layer.id, clip.id, { duration: Math.max(100, initialDuration + deltaMs) });
+                                    } else if (isResizingLeft) {
+                                      const newStart = Math.max(mediaStart, initialStartTime + deltaMs);
+                                      const newDuration = Math.max(100, initialDuration - (newStart - initialStartTime));
+                                      updateClip(layer.id, clip.id, { startTime: newStart, duration: newDuration });
+                                    } else {
+                                      // Move
+                                      const newStart = Math.max(mediaStart, Math.min(initialStartTime + deltaMs, mediaStart + mediaDuration - initialDuration));
+                                      updateClip(layer.id, clip.id, { startTime: newStart });
+                                    }
+                                  };
+                                  
+                                  const onUp = () => {
+                                    window.removeEventListener("pointermove", onMove);
+                                    window.removeEventListener("pointerup", onUp);
+                                  };
+                                  
+                                  window.addEventListener("pointermove", onMove);
+                                  window.addEventListener("pointerup", onUp);
+                                }}
+                            >
+                             {/* Drag handle (esquerda e direita) visual */}
+                             <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover/clip:opacity-100 hover:bg-primary/50" />
+                             <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover/clip:opacity-100 hover:bg-primary/50" />
+                             
+                             <select 
+                               className="text-[10px] bg-transparent font-medium text-white outline-none cursor-pointer w-full text-center z-10"
+                               value={clip.preset}
+                               onChange={(e) => handlePresetChange(layer.id, clip.id, e.target.value)}
+                               onPointerDown={(e) => e.stopPropagation()}
+                             >
+                               {Object.values(MotionLibrary).map(anim => (
+                                 <option key={anim.id} value={anim.id} className="text-black">{anim.name}</option>
+                               ))}
+                             </select>
+                           </div>
+                         )
+                      })}
+                    </div>
                   </div>
                 )
              })}
