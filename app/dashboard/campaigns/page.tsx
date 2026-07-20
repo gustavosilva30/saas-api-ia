@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 export default function CampaignBuilderPage() {
   const { 
     status, error, isGeneratingBanners, 
-    generatedAssets, analysis, copywriting, cutoutUrl, userPrompt,
+    generatedAssets, analysis, copywriting, cutoutUrl, userPrompt, originalFile,
     startCampaign, resetCampaign, generateAIBanners, setUserPrompt 
   } = useCampaignStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
