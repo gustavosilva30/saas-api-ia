@@ -322,7 +322,10 @@ export class FabricAdapter implements IRenderEngine {
         top: target.top ?? 0,
         scaleX: target.scaleX ?? 1,
         scaleY: target.scaleY ?? 1,
-        angle: target.angle ?? 0
+        angle: target.angle ?? 0,
+        fill: target.fill,
+        stroke: target.stroke,
+        strokeWidth: target.strokeWidth
       };
     }
     return null;
