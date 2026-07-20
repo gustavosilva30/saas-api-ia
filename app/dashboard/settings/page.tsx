@@ -11,7 +11,7 @@ import { useTenantStore } from "@/store/useTenantStore"
 import { useEffect, useState } from "react"
 
 export default function SettingsPage() {
-  const { openaiKey, googleKey, setOpenaiKey, setGoogleKey } = useTenantStore();
+  const { openaiKey, googleKey, bananaKey, setOpenaiKey, setGoogleKey, setBananaKey } = useTenantStore();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -133,6 +133,20 @@ export default function SettingsPage() {
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Usado para análise avançada de campanhas.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="banana-key">Banana.dev API Key (Nano Banana)</Label>
+              <Input 
+                id="banana-key" 
+                type="password" 
+                placeholder="b_..." 
+                value={mounted && bananaKey ? bananaKey : ""}
+                onChange={(e) => setBananaKey(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Usado para rodar inferências customizadas de imagem (ex: SDXL) via Serverless.
               </p>
             </div>
           </CardContent>

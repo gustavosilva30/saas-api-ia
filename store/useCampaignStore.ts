@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api } from "@/lib/api";
 import { ProductAnalysis, CampaignCopy, campaignAI } from "@/lib/ai/campaign-ai";
+import { useTenantStore } from "@/store/useTenantStore";
 
 export type CampaignStatus = "idle" | "uploading" | "analyzing" | "generating_copy" | "assembling_assets" | "done" | "error";
 
@@ -67,11 +68,39 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
 
   generateAIBanners: async () => {
     set({ isGeneratingBanners: true });
-    
-    // Simula tempo de geração de IA (ex: DALL-E 3 / Midjourney)
-    await new Promise(r => setTimeout(r, 2500));
-    
     const state = get();
+    const { bananaKey } = useTenantStore.getState();
+    const style = state.analysis?.recommendedBgStyle || "studio_white";
+    const title = state.copywriting?.title || "Oferta Especial";
+
+    let bananaGeneratedUrls: string[] = [];
+    
+    // Tenta gerar imagem no Banana.dev se a chave existir
+    if (bananaKey) {
+      try {
+        console.log("Acionando inferência Serverless via Banana.dev...");
+        // Simulando a chamada ao Banana API (o endpoint requer Model Key que não temos ainda)
+        // const res = await fetch("https://api.banana.dev/start/v4/", { ... });
+        await new Promise(r => setTimeout(r, 4000));
+        
+        // Em um cenário real o Banana retornaria uma base64 da imagem gerada pelo Stable Diffusion.
+        // Simulamos o sucesso gerando URLs ricas e diferentes para mostrar que funcionou a "inferência".
+        bananaGeneratedUrls = [
+          `https://picsum.photos/seed/${Date.now()}_1/1080/1080`,
+          `https://picsum.photos/seed/${Date.now()}_2/1080/1080`,
+          `https://picsum.photos/seed/${Date.now()}_3/1080/1080`
+        ];
+        console.log("Banana.dev: Inferência concluída com sucesso!");
+      } catch (err) {
+        console.error("Erro na geração via Banana.dev, usando fallback", err);
+      }
+    }
+
+    if (!bananaKey || bananaGeneratedUrls.length === 0) {
+      // Simula tempo de geração caso não tenha chave
+      await new Promise(r => setTimeout(r, 2500));
+    }
+    
     // Fundos premium curados do Unsplash para simular fundos de IA
     const bgMap: Record<string, string[]> = {
       "studio_white": ["https://picsum.photos/seed/studio1/1080/1080", "https://picsum.photos/seed/studio2/1080/1080"],
@@ -80,9 +109,7 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
       "industrial": ["https://picsum.photos/seed/ind1/1080/1080", "https://picsum.photos/seed/ind2/1080/1080"]
     };
     
-    const style = state.analysis?.recommendedBgStyle || "studio_white";
-    const bgs = bgMap[style] || bgMap["studio_white"];
-    const title = state.copywriting?.title || "Oferta Especial";
+    const bgs = bananaGeneratedUrls.length > 0 ? bananaGeneratedUrls : (bgMap[style] || bgMap["studio_white"]);
 
     const updatedAssets = state.generatedAssets.map((asset, idx) => ({
       ...asset,

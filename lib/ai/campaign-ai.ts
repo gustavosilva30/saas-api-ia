@@ -98,7 +98,7 @@ export const campaignAI = {
       "confidence": número decimal entre 0 e 1 indicando sua certeza.
       NÃO RETORNE NADA ALÉM DO JSON.`;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${googleKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${googleKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -111,7 +111,10 @@ export const campaignAI = {
         })
       });
 
-      if (!response.ok) throw new Error("Falha na chamada da API Vision do Gemini");
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Falha na chamada da API Vision do Gemini: ${err}`);
+      }
       
       const data = await response.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -156,7 +159,7 @@ export const campaignAI = {
       
       IMPORTANTE: Retorne APENAS o JSON válido.`;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${googleKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${googleKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -166,7 +169,10 @@ export const campaignAI = {
         })
       });
 
-      if (!response.ok) throw new Error("Falha na chamada da API de texto do Gemini");
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Falha na chamada da API de texto do Gemini: ${err}`);
+      }
       
       const data = await response.json();
       const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
