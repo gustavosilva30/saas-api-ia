@@ -178,10 +178,10 @@ export default function CampaignBuilderPage() {
                           {feedAsset?.bgUrl && (
                             <img src={feedAsset.bgUrl} className="absolute inset-0 w-full h-full object-cover opacity-90" alt="BG" />
                           )}
-                          <img src={cutoutUrl!} className={cn("relative z-10 w-full h-full object-contain p-4 drop-shadow-2xl transition-all duration-700", feedAsset?.bgUrl ? "scale-90" : "scale-100")} alt="Feed" />
+                          <img src={cutoutUrl!} className={cn("relative z-10 w-full h-full object-contain p-4 drop-shadow-2xl transition-all duration-700 mix-blend-multiply", feedAsset?.bgUrl ? "scale-90" : "scale-100")} alt="Feed" />
                           {feedAsset?.overlayText && (
-                            <div className="absolute top-6 w-full text-center z-20 px-4">
-                              <h1 className="text-white font-black text-2xl uppercase tracking-wider drop-shadow-lg" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
+                            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-16 pb-6 px-4 z-20">
+                              <h1 className="text-white font-bold text-lg md:text-xl leading-tight text-center tracking-wide drop-shadow-md">
                                 {feedAsset.overlayText}
                               </h1>
                             </div>
@@ -203,7 +203,7 @@ export default function CampaignBuilderPage() {
                             <img src={mlAsset.bgUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-60" alt="BG" />
                           )}
                           {mlAsset?.bgUrl && <div className="absolute inset-0 bg-white/50 backdrop-blur-md" />}
-                          <img src={cutoutUrl!} className="relative z-10 w-[80%] h-[80%] object-contain drop-shadow-md" alt="ML" />
+                          <img src={cutoutUrl!} className="relative z-10 w-[80%] h-[80%] object-contain drop-shadow-md mix-blend-multiply" alt="ML" />
                         </div>
                       </CardContent>
                     </Card>
@@ -220,14 +220,14 @@ export default function CampaignBuilderPage() {
                           {storyAsset?.bgUrl && (
                             <img src={storyAsset.bgUrl} className="absolute inset-0 w-full h-full object-cover opacity-90" alt="BG" />
                           )}
-                          <img src={cutoutUrl!} className={cn("relative z-10 w-full h-full object-contain p-2 drop-shadow-2xl transition-all duration-700", storyAsset?.bgUrl ? "scale-90 translate-y-12" : "scale-100")} alt="Story" />
+                          <img src={cutoutUrl!} className={cn("relative z-10 w-full h-full object-contain p-2 drop-shadow-2xl transition-all duration-700 mix-blend-multiply", storyAsset?.bgUrl ? "scale-90 translate-y-12" : "scale-100")} alt="Story" />
                           {storyAsset?.overlayText && (
-                            <div className="absolute top-12 w-full text-center z-20 px-2">
-                              <h1 className="text-white font-black text-xl uppercase tracking-wider drop-shadow-lg" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
+                            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-20 pb-8 px-4 z-20 flex flex-col items-center">
+                              <h1 className="text-white font-bold text-base leading-tight text-center tracking-wide mb-4 drop-shadow-md">
                                 {storyAsset.overlayText}
                               </h1>
-                              <div className="mt-2 text-white/90 text-[10px] font-bold bg-black/40 inline-block px-2 py-1 rounded backdrop-blur-sm">
-                                ARRASTE PARA CIMA
+                              <div className="mt-2 text-white/95 text-[10px] font-bold bg-white/20 border border-white/30 inline-flex items-center justify-center px-4 py-2 rounded-full backdrop-blur-md uppercase tracking-widest shadow-lg">
+                                Arraste para Cima 
                               </div>
                             </div>
                           )}
