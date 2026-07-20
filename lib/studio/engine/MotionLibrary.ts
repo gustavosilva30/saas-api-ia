@@ -13,6 +13,7 @@ export interface MotionAnimation {
   keyframes: KeyframeDefinition[];
 }
 
+export const MotionLibrary: Record<string, MotionAnimation> = {
   // Entradas
   "fade-in": { id: "fade-in", name: "Fade In", category: "Entrada", defaultDuration: 1000, defaultEasing: "linear", keyframes: [{ property: "opacity", from: 0, to: 1 }] },
   "fade-up": { id: "fade-up", name: "Fade Up", category: "Entrada", defaultDuration: 800, defaultEasing: "easeOutCubic", keyframes: [{ property: "opacity", from: 0, to: 1 }, { property: "top", from: 50, to: 0 }] },
