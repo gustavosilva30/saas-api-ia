@@ -14,7 +14,10 @@ export class FabricAdapter implements IRenderEngine {
   private lastPosX = 0;
   private lastPosY = 0;
 
+  private isDestroyed = false;
+
   init(canvasElement: HTMLCanvasElement, width: number, height: number): void {
+    this.isDestroyed = false;
     // Configurações base do Canvas
     this.canvas = new fabric.Canvas(canvasElement, {
       width,
@@ -30,6 +33,7 @@ export class FabricAdapter implements IRenderEngine {
     // Dispara evento global avisando que o motor está pronto
     EventBus.emit(StudioEvent.CANVAS_READY, { width, height });
   }
+
 
   private setupEvents() {
     if (!this.canvas) return;
@@ -131,6 +135,7 @@ export class FabricAdapter implements IRenderEngine {
   }
 
   destroy(): void {
+    this.isDestroyed = true;
     if (this.canvas) {
       this.canvas.dispose();
       this.canvas = null;
@@ -138,14 +143,14 @@ export class FabricAdapter implements IRenderEngine {
   }
 
   setZoom(zoom: number): void {
-    if (this.canvas) {
+    if (this.canvas && !this.isDestroyed) {
       const center = this.canvas.getCenter();
       this.canvas.zoomToPoint({ x: center.left, y: center.top }, zoom);
     }
   }
 
   setPan(x: number, y: number): void {
-    if (this.canvas && this.canvas.viewportTransform) {
+    if (this.canvas && this.canvas.viewportTransform && !this.isDestroyed) {
       this.canvas.viewportTransform[4] = x;
       this.canvas.viewportTransform[5] = y;
       this.canvas.requestRenderAll();
@@ -153,7 +158,7 @@ export class FabricAdapter implements IRenderEngine {
   }
 
   getViewport(): { zoom: number; pan: { x: number; y: number; }; } {
-    if (!this.canvas) return { zoom: 1, pan: { x: 0, y: 0 } };
+    if (!this.canvas || this.isDestroyed) return { zoom: 1, pan: { x: 0, y: 0 } };
     const vpt = this.canvas.viewportTransform;
     return {
       zoom: this.canvas.getZoom(),
@@ -162,7 +167,7 @@ export class FabricAdapter implements IRenderEngine {
   }
 
   requestRender(): void {
-    if (this.canvas) {
+    if (this.canvas && !this.isDestroyed) {
       this.canvas.requestRenderAll();
     }
   }
@@ -176,9 +181,10 @@ export class FabricAdapter implements IRenderEngine {
 
   addImageFromUrl(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      if (!this.canvas) return reject("Canvas not initialized");
+      if (!this.canvas || this.isDestroyed) return reject("Canvas not initialized");
 
       fabric.Image.fromURL(url, (img) => {
+        if (this.isDestroyed || !this.canvas) return reject("Canvas disposed before image loaded");
         if (!img) return reject("Failed to load image");
         
         const id = uuidv4();
@@ -211,7 +217,7 @@ export class FabricAdapter implements IRenderEngine {
   }
 
   getSelectedObjectImageUrl(): string | null {
-    if (!this.canvas) return null;
+    if (!this.canvas || this.isDestroyed) return null;
     const activeObject = this.canvas.getActiveObject();
     if (activeObject && activeObject.type === 'image') {
       return (activeObject as fabric.Image).getSrc() || null;
@@ -221,7 +227,7 @@ export class FabricAdapter implements IRenderEngine {
 
   updateObjectImageUrl(id: string, url: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (!this.canvas) return reject("Canvas not initialized");
+      if (!this.canvas || this.isDestroyed) return reject("Canvas not initialized");
       const objects = this.canvas.getObjects() as any[];
       const target = objects.find(o => o.id === id) as fabric.Image;
       
@@ -238,6 +244,7 @@ export class FabricAdapter implements IRenderEngine {
       const visualHeight = oldHeight * oldScaleY;
 
       target.setSrc(url, (img) => {
+        if (this.isDestroyed || !this.canvas) return reject("Canvas disposed before new image loaded");
         if (!img) return reject("Failed to load new image");
         
         // Mantém a proporção e o tamanho visual antigo
@@ -519,12 +526,13 @@ export class FabricAdapter implements IRenderEngine {
 
   loadState(stateJson: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (!this.canvas) return reject("Canvas not initialized");
+      if (!this.canvas || this.isDestroyed) return reject("Canvas not initialized");
       
       try {
         const json = JSON.parse(stateJson);
         this.canvas.loadFromJSON(json, () => {
-          this.canvas!.requestRenderAll();
+          if (this.isDestroyed || !this.canvas) return reject("Canvas disposed during load");
+          this.canvas.requestRenderAll();
           resolve();
         });
       } catch (err) {

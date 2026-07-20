@@ -31,10 +31,17 @@ export function StudioCanvasArea() {
     adapterRef.current = adapter
     setEngine(adapter)
 
-    // Tenta carregar o estado salvo previamente
+    // Tenta carregar o estado salvo previamente com um leve atraso 
+    // para evitar crash do Fabric.js no Strict Mode (unmount imediato)
     const savedState = localStorage.getItem(AUTOSAVE_KEY)
+    let loadTimeout: NodeJS.Timeout | null = null;
+    
     if (savedState) {
-      adapter.loadState(savedState).catch(e => console.error("Error loading autosave:", e))
+      loadTimeout = setTimeout(() => {
+        if (adapterRef.current) {
+           adapter.loadState(savedState).catch(e => console.error("Error loading autosave:", e))
+        }
+      }, 200);
     }
 
     // Auto-Save: Escutamos eventos que modificam o canvas
@@ -74,6 +81,7 @@ export function StudioCanvasArea() {
     window.addEventListener("resize", handleResize)
 
     return () => {
+      if (loadTimeout) clearTimeout(loadTimeout);
       window.removeEventListener("resize", handleResize)
       unsubAdd()
       unsubRemove()
@@ -82,6 +90,7 @@ export function StudioCanvasArea() {
       motion.detachRenderEngine()
       if (adapterRef.current) {
         adapterRef.current.destroy()
+        adapterRef.current = null;
       }
     }
   }, [setEngine])

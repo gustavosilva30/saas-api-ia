@@ -1,6 +1,6 @@
 "use client"
 import React, { useRef, useState } from "react"
-import { Play, Pause, SkipBack, Scissors, Clock, Settings2, Plus } from "lucide-react"
+import { Play, Pause, SkipBack, Scissors, Clock, Settings2, Plus, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { useTimelineStore } from "@/store/useTimelineStore"
@@ -37,6 +37,60 @@ export function TimelinePlugin() {
 
   const handlePresetChange = (layerId: string, clipId: string, preset: string) => {
     updateClip(layerId, clipId, { preset });
+  };
+
+  const handleAutoAnimate = () => {
+    const { clearTracks, setDuration, addClip, seek, play } = useTimelineStore.getState();
+    clearTracks();
+    setDuration(5000);
+    
+    let delayCounter = 0;
+    
+    // A ordem importa: layers que estão mais ao fundo primeiro
+    layers.forEach((layer) => {
+      let preset = "fade-in";
+      let easing = "easeOutCubic";
+      let duration = 1000;
+      let delay = delayCounter;
+      
+      const isBg = layer.name.toLowerCase().includes("bg") || layer.name.toLowerCase().includes("fundo") || layer.zIndex === 0;
+      
+      if (isBg) {
+        preset = "fade-in";
+        duration = 2000;
+        delay = 0;
+      } else if (layer.type === "image") {
+        // Imagem/Produto
+        preset = "bounce-in";
+        easing = "easeOutBounce";
+        delay = delayCounter + 400;
+        delayCounter += 400;
+      } else if (layer.type === "i-text" || layer.type === "textbox") {
+        // Texto
+        preset = "pop";
+        easing = "easeOutBack";
+        duration = 800;
+        delay = delayCounter + 300;
+        delayCounter += 300;
+      } else {
+        // Formas e outros
+        preset = "slide-up";
+        delay = delayCounter + 200;
+        delayCounter += 200;
+      }
+      
+      addClip(layer.id, {
+        id: Math.random().toString(36).substr(2, 9),
+        preset,
+        startTime: 0,
+        duration,
+        delay,
+        easing
+      });
+    });
+    
+    seek(0);
+    play();
   };
 
   return (
@@ -100,6 +154,11 @@ export function TimelinePlugin() {
                <Plus className="size-3 mr-1" /> Anim Layer
              </Button>
           )}
+
+          <Button variant="default" size="sm" onClick={handleAutoAnimate} className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700 text-white border-none shadow-md shadow-indigo-500/20">
+            <Sparkles className="size-3 mr-1" /> Auto Animate
+          </Button>
+
           <Button variant="ghost" size="icon" className="size-8">
             <Settings2 className="size-4 text-muted-foreground" />
           </Button>
