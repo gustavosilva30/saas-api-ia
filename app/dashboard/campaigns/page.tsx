@@ -50,21 +50,38 @@ export default function CampaignBuilderPage() {
         />
         
         <div className="flex-1 flex items-center justify-center p-6">
-          <div 
-            className="w-full max-w-2xl border-2 border-dashed rounded-2xl p-16 flex flex-col items-center justify-center text-center bg-card hover:bg-muted/30 transition-colors cursor-pointer border-primary/20 hover:border-primary/50"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUpload} />
-            <div className="size-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
-              <Sparkles className="size-10 text-primary" />
+          <div className="w-full max-w-2xl flex flex-col gap-4">
+            <div 
+              className="border-2 border-dashed rounded-2xl p-16 flex flex-col items-center justify-center text-center bg-card hover:bg-muted/30 transition-colors cursor-pointer border-primary/20 hover:border-primary/50"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUpload} />
+              <div className="size-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
+                <Sparkles className="size-10 text-primary" />
+              </div>
+              <h3 className="text-2xl font-bold mb-2">Comece a Mágica</h3>
+              <p className="text-muted-foreground mb-8 max-w-md">
+                Arraste a foto bruta do seu produto aqui. A inteligência artificial fará todo o resto: recorte, composição, textos de venda e variações de formato.
+              </p>
+              <Button size="lg" className="rounded-full px-8">
+                Selecionar Foto
+              </Button>
             </div>
-            <h3 className="text-2xl font-bold mb-2">Comece a Mágica</h3>
-            <p className="text-muted-foreground mb-8 max-w-md">
-              Arraste a foto bruta do seu produto aqui. A inteligência artificial fará todo o resto: recorte, composição, textos de venda e variações de formato.
-            </p>
-            <Button size="lg" className="rounded-full px-8">
-              Selecionar Foto
-            </Button>
+
+            <div className="bg-card border rounded-xl p-6 shadow-sm">
+              <label className="text-sm font-semibold mb-2 block">
+                Instruções para a IA (Opcional)
+              </label>
+              <p className="text-xs text-muted-foreground mb-3">
+                Descreva como você quer o visual. Ex: "É um tênis de corrida. Quero fundo neon verde e texto no topo".
+              </p>
+              <textarea
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+                placeholder="Suas instruções de diretor de arte..."
+                value={userPrompt}
+                onChange={(e) => setUserPrompt(e.target.value)}
+              />
+            </div>
           </div>
         </div>
       </div>
