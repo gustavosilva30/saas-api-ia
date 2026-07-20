@@ -1,5 +1,3 @@
-import WebFont from "webfontloader";
-
 export interface FontCategory {
   name: string;
   fonts: string[];
@@ -33,18 +31,18 @@ export const FONT_CATEGORIES: FontCategory[] = [
 ];
 
 // Carregador de fonte dinâmico
-export const loadFont = (fontFamily: string): Promise<void> => {
+export const loadFont = async (fontFamily: string): Promise<void> => {
+  if (typeof window === "undefined") return;
+
+  const WebFont = (await import("webfontloader")).default;
+
   return new Promise((resolve, reject) => {
     WebFont.load({
       google: {
         families: [fontFamily]
       },
-      active: () => {
-        resolve();
-      },
-      inactive: () => {
-        reject(new Error(`Falha ao carregar a fonte ${fontFamily}`));
-      }
+      active: () => resolve(),
+      inactive: () => reject(new Error(`Falha ao carregar a fonte ${fontFamily}`))
     });
   });
 };
