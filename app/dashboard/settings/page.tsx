@@ -7,8 +7,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { useTenantStore } from "@/store/useTenantStore"
+import { useEffect, useState } from "react"
 
 export default function SettingsPage() {
+  const { openaiKey, googleKey, setOpenaiKey, setGoogleKey } = useTenantStore();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -87,6 +96,48 @@ export default function SettingsPage() {
           </CardContent>
           <CardFooter className="border-t border-border/50 pt-6">
             <Button>Salvar Configurações da API</Button>
+          </CardFooter>
+        </Card>
+        
+        {/* Provedores de IA (BYOK) */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Provedores de IA (BYOK)</CardTitle>
+            <CardDescription>
+              Traga sua própria chave (Bring Your Own Key) para utilizar recursos de Inteligência Artificial sem consumir créditos adicionais da plataforma. As chaves são salvas localmente no seu dispositivo por segurança.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="openai-key">OpenAI API Key (ChatGPT, DALL-E)</Label>
+              <Input 
+                id="openai-key" 
+                type="password" 
+                placeholder="sk-..." 
+                value={mounted && openaiKey ? openaiKey : ""}
+                onChange={(e) => setOpenaiKey(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Usado para geração de Copy e Motion Director.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="google-key">Google Gemini API Key</Label>
+              <Input 
+                id="google-key" 
+                type="password" 
+                placeholder="AIzaSy..." 
+                value={mounted && googleKey ? googleKey : ""}
+                onChange={(e) => setGoogleKey(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Usado para análise avançada de campanhas.
+              </p>
+            </div>
+          </CardContent>
+          <CardFooter className="border-t border-border/50 pt-6">
+            <Button onClick={() => alert("Chaves salvas localmente com sucesso!")}>Salvar Chaves de IA</Button>
           </CardFooter>
         </Card>
         

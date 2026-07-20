@@ -11,6 +11,20 @@ export class NextApiBackgroundRemovalProvider implements IBackgroundRemovalProvi
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
+      // Injeta chaves BYOK
+      if (typeof window !== "undefined") {
+        try {
+          const tenantStateStr = localStorage.getItem("tenant-ai-keys");
+          if (tenantStateStr) {
+            const tenantState = JSON.parse(tenantStateStr).state;
+            if (tenantState.openaiKey) headers["x-tenant-openai-key"] = tenantState.openaiKey;
+            if (tenantState.googleKey) headers["x-tenant-google-key"] = tenantState.googleKey;
+          }
+        } catch (e) {
+          console.error("Failed to parse BYOK keys");
+        }
+      }
+
       const res = await fetch(`${API_BASE}/remove-bg`, {
         method: "POST",
         headers,

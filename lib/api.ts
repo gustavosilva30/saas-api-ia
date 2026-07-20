@@ -163,6 +163,17 @@ export const api = {
       headers["Authorization"] = `Bearer ${token}`
     }
 
+    if (typeof window !== "undefined") {
+      try {
+        const tenantStateStr = localStorage.getItem("tenant-ai-keys");
+        if (tenantStateStr) {
+          const tenantState = JSON.parse(tenantStateStr).state;
+          if (tenantState.openaiKey) headers["x-tenant-openai-key"] = tenantState.openaiKey;
+          if (tenantState.googleKey) headers["x-tenant-google-key"] = tenantState.googleKey;
+        }
+      } catch (e) {}
+    }
+
     const response = await fetch(`${API_BASE}/remove-bg`, {
       method: "POST",
       headers,
@@ -248,9 +259,23 @@ export const api = {
     formData.append("file", file)
 
     const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const headers: Record<string, string> = {}
+    if (token) headers["Authorization"] = `Bearer ${token}`
+    
+    if (typeof window !== "undefined") {
+      try {
+        const tenantStateStr = localStorage.getItem("tenant-ai-keys");
+        if (tenantStateStr) {
+          const tenantState = JSON.parse(tenantStateStr).state;
+          if (tenantState.openaiKey) headers["x-tenant-openai-key"] = tenantState.openaiKey;
+          if (tenantState.googleKey) headers["x-tenant-google-key"] = tenantState.googleKey;
+        }
+      } catch (e) {}
+    }
+
     const res = await fetch(`${API_BASE}/campaigns/analyze`, {
       method: "POST",
-      headers: token ? { "Authorization": `Bearer ${token}` } : {},
+      headers,
       body: formData,
     })
     if (!res.ok) throw new Error("Falha ao iniciar análise de imagem")
@@ -259,12 +284,23 @@ export const api = {
 
   async createCampaignCopyJob(category: string): Promise<{ job_id: string; status: string }> {
     const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    if (token) headers["Authorization"] = `Bearer ${token}`
+    
+    if (typeof window !== "undefined") {
+      try {
+        const tenantStateStr = localStorage.getItem("tenant-ai-keys");
+        if (tenantStateStr) {
+          const tenantState = JSON.parse(tenantStateStr).state;
+          if (tenantState.openaiKey) headers["x-tenant-openai-key"] = tenantState.openaiKey;
+          if (tenantState.googleKey) headers["x-tenant-google-key"] = tenantState.googleKey;
+        }
+      } catch (e) {}
+    }
+
     const res = await fetch(`${API_BASE}/campaigns/generate-copy`, {
       method: "POST",
-      headers: token ? { 
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-      } : { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ category }),
     })
     if (!res.ok) throw new Error("Falha ao iniciar geração de copy")
