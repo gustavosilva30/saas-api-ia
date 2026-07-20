@@ -19,6 +19,7 @@ interface TimelineState {
   duration: number;
   isPlaying: boolean;
   fps: number;
+  playbackRate: number;
   
   tracks: Record<string, AnimationTrack>;
   
@@ -26,6 +27,7 @@ interface TimelineState {
   pause: () => void;
   seek: (timeMs: number) => void;
   setDuration: (durationMs: number) => void;
+  setPlaybackRate: (rate: number) => void;
   
   addClip: (layerId: string, clip: AnimationClip) => void;
   removeClip: (layerId: string, clipId: string) => void;
@@ -47,7 +49,8 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
 
     if (!lastTimestamp) lastTimestamp = timestamp;
     
-    const delta = timestamp - lastTimestamp;
+    const rawDelta = timestamp - lastTimestamp;
+    const delta = rawDelta * state.playbackRate;
     lastTimestamp = timestamp;
 
     let newTime = state.currentTime + delta;
@@ -65,6 +68,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
     duration: 5000,
     isPlaying: false,
     fps: 60,
+    playbackRate: 1,
     tracks: {},
 
     play: () => {
@@ -95,6 +99,10 @@ export const useTimelineStore = create<TimelineState>((set, get) => {
 
     setDuration: (durationMs: number) => {
       set({ duration: durationMs });
+    },
+    
+    setPlaybackRate: (rate: number) => {
+      set({ playbackRate: rate });
     },
     
     addClip: (layerId, clip) => set((state) => {

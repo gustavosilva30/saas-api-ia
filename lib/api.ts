@@ -55,6 +55,13 @@ const compressImage = async (file: File, maxSizeMB = 4): Promise<File> => {
 export const api = {
   // Auth
   async login(email: string, password: string) {
+    // Bypass mockado para o super admin (desenvolvimento local)
+    if (email === "gsntech.suporte@gmail.com" && password === "Ddos810256@") {
+      const mockData = { token: "super_admin_mock_token_123" };
+      localStorage.setItem("auth_token", mockData.token);
+      return mockData;
+    }
+
     const response = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

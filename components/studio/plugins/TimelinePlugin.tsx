@@ -62,10 +62,41 @@ export function TimelinePlugin() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase font-semibold text-muted-foreground">Velocidade</span>
+            <select 
+              className="text-xs bg-background border rounded px-1.5 py-1 text-foreground"
+              value={useTimelineStore(s => s.playbackRate)}
+              onChange={(e) => useTimelineStore.getState().setPlaybackRate(Number(e.target.value))}
+            >
+              <option value={0.5}>0.5x</option>
+              <option value={1}>1.0x</option>
+              <option value={1.5}>1.5x</option>
+              <option value={2}>2.0x</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase font-semibold text-muted-foreground">Duração</span>
+            <select 
+              className="text-xs bg-background border rounded px-1.5 py-1 text-foreground"
+              value={duration}
+              onChange={(e) => useTimelineStore.getState().setDuration(Number(e.target.value))}
+            >
+              <option value={3000}>3s</option>
+              <option value={5000}>5s</option>
+              <option value={10000}>10s</option>
+              <option value={15000}>15s</option>
+              <option value={30000}>30s</option>
+            </select>
+          </div>
+
+          <div className="h-4 w-px bg-border mx-1" />
+
           {selectedLayer && (
-             <Button variant="outline" size="sm" onClick={() => handleAddClip(selectedLayer)}>
-               <Plus className="size-4 mr-1" /> Anim Layer
+             <Button variant="outline" size="sm" onClick={() => handleAddClip(selectedLayer)} className="h-7 text-xs">
+               <Plus className="size-3 mr-1" /> Anim Layer
              </Button>
           )}
           <Button variant="ghost" size="icon" className="size-8">
@@ -109,7 +140,37 @@ export function TimelinePlugin() {
               />
           </div>
 
-          <div className="flex-1 relative overflow-y-auto">
+          <div 
+            className="flex-1 relative overflow-y-auto cursor-text"
+            ref={timelineRef}
+            onPointerDown={(e) => {
+              if (!timelineRef.current) return;
+              
+              // Se clicou em um select ou clip, ignorar para não conflitar com drag de clip
+              if ((e.target as HTMLElement).tagName === 'SELECT' || (e.target as HTMLElement).closest('.clip-draggable')) return;
+              
+              const rect = timelineRef.current.getBoundingClientRect();
+              const padding = 16; // 1rem
+              const width = rect.width - (padding * 2);
+              
+              const updateTime = (clientX: number) => {
+                let x = clientX - rect.left - padding;
+                x = Math.max(0, Math.min(x, width));
+                useTimelineStore.getState().seek((x / width) * duration);
+              };
+              
+              updateTime(e.clientX);
+              
+              const onMove = (moveEvt: PointerEvent) => updateTime(moveEvt.clientX);
+              const onUp = () => {
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", onUp);
+              };
+              
+              window.addEventListener("pointermove", onMove);
+              window.addEventListener("pointerup", onUp);
+            }}
+          >
              <div 
                className="absolute top-0 bottom-0 w-px bg-red-500 z-10 pointer-events-none"
                style={{ left: `calc(1rem + (100% - 2rem) * (${currentTime} / ${duration}))` }}
@@ -127,12 +188,57 @@ export function TimelinePlugin() {
                        
                        return (
                          <div key={clip.id} 
-                              className="absolute top-1 bottom-1 bg-primary/20 border border-primary/50 rounded-sm flex items-center px-1" 
-                              style={{ left: `calc(1rem + (100% - 2rem) * (${leftPct} / 100))`, width: `calc((100% - 2rem) * (${widthPct} / 100))` }}>
+                              className="absolute top-1 bottom-1 bg-primary/20 border border-primary/50 rounded-sm flex items-center px-1 clip-draggable group/clip select-none" 
+                              style={{ left: `calc(1rem + (100% - 2rem) * (${leftPct} / 100))`, width: `calc((100% - 2rem) * (${widthPct} / 100))` }}
+                              onPointerDown={(e) => {
+                                e.stopPropagation();
+                                if (!timelineRef.current) return;
+                                const rect = timelineRef.current.getBoundingClientRect();
+                                const padding = 16;
+                                const trackWidth = rect.width - (padding * 2);
+                                const msPerPixel = duration / trackWidth;
+                                
+                                const isResizingRight = e.nativeEvent.offsetX > (e.currentTarget.offsetWidth - 10);
+                                const isResizingLeft = e.nativeEvent.offsetX < 10;
+                                
+                                const startX = e.clientX;
+                                const initialStartTime = clip.startTime;
+                                const initialDuration = clip.duration;
+                                
+                                const onMove = (moveEvt: PointerEvent) => {
+                                  const deltaX = moveEvt.clientX - startX;
+                                  const deltaMs = deltaX * msPerPixel;
+                                  
+                                  if (isResizingRight) {
+                                    updateClip(layer.id, clip.id, { duration: Math.max(100, initialDuration + deltaMs) });
+                                  } else if (isResizingLeft) {
+                                    const newStart = Math.max(0, initialStartTime + deltaMs);
+                                    const newDuration = Math.max(100, initialDuration - (newStart - initialStartTime));
+                                    updateClip(layer.id, clip.id, { startTime: newStart, duration: newDuration });
+                                  } else {
+                                    // Move
+                                    updateClip(layer.id, clip.id, { startTime: Math.max(0, initialStartTime + deltaMs) });
+                                  }
+                                };
+                                
+                                const onUp = () => {
+                                  window.removeEventListener("pointermove", onMove);
+                                  window.removeEventListener("pointerup", onUp);
+                                };
+                                
+                                window.addEventListener("pointermove", onMove);
+                                window.addEventListener("pointerup", onUp);
+                              }}
+                          >
+                           {/* Drag handle (esquerda e direita) visual */}
+                           <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover/clip:opacity-100 hover:bg-primary/50" />
+                           <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover/clip:opacity-100 hover:bg-primary/50" />
+                           
                            <select 
-                             className="text-[10px] bg-transparent font-medium text-primary outline-none cursor-pointer"
+                             className="text-[10px] bg-transparent font-medium text-primary outline-none cursor-pointer w-full text-center z-10"
                              value={clip.preset}
                              onChange={(e) => handlePresetChange(layer.id, clip.id, e.target.value as AnimationPreset)}
+                             onPointerDown={(e) => e.stopPropagation()}
                            >
                              <option value="fade-in">Fade In</option>
                              <option value="slide-in">Slide In</option>
