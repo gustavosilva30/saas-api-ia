@@ -1,31 +1,27 @@
 import { create } from "zustand";
-
-export type AssetCategory = "uploads" | "mockups" | "textures" | "logos" | "ia";
-
-export interface AssetItem {
-  id: string;
-  url: string;
-  category: AssetCategory;
-  name: string;
-  thumbnailUrl?: string; // Para texturas pesadas, pode haver um thumbnail
-}
+import { AssetItem, AssetCategory } from "@/lib/studio/assets/AssetTypes";
 
 const PREMIUM_MOCK_ASSETS: AssetItem[] = [
-  // Mockups
-  { id: "m1", url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=600&auto=format&fit=crop", category: "mockups", name: "Tênis Esportivo Nike" },
-  { id: "m2", url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop", category: "mockups", name: "Headphone Premium" },
-  { id: "m3", url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=600&auto=format&fit=crop", category: "mockups", name: "Relógio Smartwatch" },
-  { id: "m4", url: "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?q=80&w=600&auto=format&fit=crop", category: "mockups", name: "MacBook Pro M2" },
-  { id: "m5", url: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?q=80&w=600&auto=format&fit=crop", category: "mockups", name: "Câmera Vintage" },
-  
-  // Texturas
-  { id: "t1", url: "https://images.unsplash.com/photo-1603533867307-b354255e3c32?q=80&w=600&auto=format&fit=crop", category: "textures", name: "Papel Amassado Dark" },
-  { id: "t2", url: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=600&auto=format&fit=crop", category: "textures", name: "Metal Escovado" },
-  { id: "t3", url: "https://images.unsplash.com/photo-1574169208507-84376144848b?q=80&w=600&auto=format&fit=crop", category: "textures", name: "Mármore Branco" },
-  { id: "t4", url: "https://images.unsplash.com/photo-1563814884260-1e523f25c7cc?q=80&w=600&auto=format&fit=crop", category: "textures", name: "Madeira Rústica" },
-  
-  // Logos
-  { id: "l1", url: "https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?q=80&w=400&auto=format&fit=crop", category: "logos", name: "Logo Minimalista" },
+  { 
+    id: "m1", url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=600&auto=format&fit=crop", 
+    category: "mockups", categories: ["mockups", "all"], name: "Tênis Esportivo Nike", type: "image",
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), usageCount: 0, status: "active", permission: "public"
+  },
+  { 
+    id: "m2", url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop", 
+    category: "mockups", categories: ["mockups", "all"], name: "Headphone Premium", type: "image",
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), usageCount: 0, status: "active", permission: "public"
+  },
+  { 
+    id: "t1", url: "https://images.unsplash.com/photo-1603533867307-b354255e3c32?q=80&w=600&auto=format&fit=crop", 
+    category: "textures", categories: ["textures", "all"], name: "Papel Amassado Dark", type: "image",
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), usageCount: 0, status: "active", permission: "public"
+  },
+  { 
+    id: "l1", url: "https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?q=80&w=400&auto=format&fit=crop", 
+    category: "logos", categories: ["logos", "all"], name: "Logo Minimalista", type: "image",
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), usageCount: 0, status: "active", permission: "public"
+  },
 ];
 
 interface AssetStoreState {
@@ -33,6 +29,7 @@ interface AssetStoreState {
   
   addAsset: (file: File, category: AssetCategory) => void;
   removeAsset: (id: string) => void;
+  updateAsset: (updatedAsset: AssetItem) => void;
   getAssetsByCategory: (category: AssetCategory, searchQuery?: string) => AssetItem[];
 }
 
@@ -45,10 +42,28 @@ export const useAssetStore = create<AssetStoreState>((set, get) => ({
       url: URL.createObjectURL(file), // Upload em memória temporário
       name: file.name,
       category,
+      categories: [category, "all"],
+      type: "image",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      usageCount: 0,
+      status: "active",
+      permission: "tenant"
     };
+    
+    // Princípio 3: Emitir evento no EventBus para que o AssetClassifier (IA) possa atuar de forma desacoplada
+    import("@/lib/studio/events/EventBus").then(({ EventBus, StudioEvent }) => {
+      EventBus.emit(StudioEvent.ASSET_UPLOADED, newAsset);
+    });
     
     set((state) => ({
       assets: [newAsset, ...state.assets]
+    }));
+  },
+
+  updateAsset: (updatedAsset) => {
+    set((state) => ({
+      assets: state.assets.map(a => a.id === updatedAsset.id ? updatedAsset : a)
     }));
   },
 
@@ -61,7 +76,8 @@ export const useAssetStore = create<AssetStoreState>((set, get) => ({
   getAssetsByCategory: (category, searchQuery = "") => {
     const state = get();
     return state.assets.filter(a => {
-      const matchCategory = a.category === category;
+      // "all" matches any asset that hasn't been explicitly hidden
+      const matchCategory = category === "all" ? true : a.categories.includes(category);
       const matchSearch = a.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCategory && matchSearch;
     });

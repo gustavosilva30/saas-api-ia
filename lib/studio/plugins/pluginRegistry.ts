@@ -1,5 +1,5 @@
 import { PluginManager } from "./PluginManager"
-import { AssetsPlugin } from "@/components/studio/plugins/AssetsPlugin"
+import { AssetsManagerPlugin } from "@/components/studio/plugins/AssetsManagerPlugin/AssetsManagerPlugin"
 import { BackgroundPlugin } from "@/components/studio/plugins/BackgroundPlugin"
 import { ShadowPlugin } from "@/components/studio/plugins/ShadowPlugin"
 import { RemoveBgPlugin } from "@/components/studio/plugins/RemoveBgPlugin"
@@ -18,14 +18,13 @@ import { NextApiBackgroundRemovalProvider } from "@/lib/studio/ai/providers/Back
 export function registerAllPlugins() {
   // Evita registrar múltiplos se a função for chamada novamente no React Strict Mode
   if (PluginManager.getAllPlugins().length === 0) {
-    PluginManager.register(AssetsPlugin)
+    PluginManager.register(AssetsManagerPlugin)
     PluginManager.register(BackgroundPlugin)
     PluginManager.register(ShadowPlugin)
     PluginManager.register(AdjustmentsPlugin)
     PluginManager.register(SelectionPlugin)
     PluginManager.register(TypographyPlugin)
     PluginManager.register(ShapePlugin)
-    PluginManager.register(RemoveBgPlugin)
     PluginManager.register(LayersPlugin)
     PluginManager.register(HistoryPlugin)
     PluginManager.register(ExportPlugin)

@@ -1,11 +1,13 @@
 "use client"
-import React, { useEffect, useState } from "react"
-import { Undo, Redo, Download, Play, ChevronLeft, Image as ImageIcon, Loader2 } from "lucide-react"
+import React, { useEffect, useState, useRef } from "react"
+import { Undo, Redo, Download, Play, ChevronLeft, Image as ImageIcon, Loader2, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useStudioStore } from "@/store/useStudioStore"
 import { EventBus, StudioEvent } from "@/lib/studio/events/EventBus"
 import { globalCommandManager } from "@/lib/studio/commands/GlobalCommandManager"
+import { AddImageCommand } from "@/lib/studio/commands/AddImageCommand"
+import { useAssetStore } from "@/store/useAssetStore"
 
 export function StudioTopbar() {
   const localCommandManager = globalCommandManager;
@@ -14,6 +16,19 @@ export function StudioTopbar() {
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file)
+      const cmd = new AddImageCommand(url)
+      globalCommandManager.executeCommand(cmd)
+      useAssetStore.getState().addAsset(file, "uploads")
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
 
   const updateHistoryState = () => {
     if (localCommandManager) {
@@ -101,6 +116,17 @@ export function StudioTopbar() {
       </div>
       
       <div className="flex items-center gap-2">
+        <input 
+          type="file" 
+          accept="image/*" 
+          className="hidden" 
+          ref={fileInputRef}
+          onChange={handleImageUpload}
+        />
+        <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+          <Upload className="h-4 w-4 mr-2" />
+          Adicionar Imagem
+        </Button>
         <Button size="sm" variant="outline" onClick={handleExportVideo} disabled={isExportingVideo}>
           {isExportingVideo ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />

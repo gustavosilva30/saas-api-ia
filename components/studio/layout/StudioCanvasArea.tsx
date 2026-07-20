@@ -5,6 +5,7 @@ import { FabricAdapter } from "@/lib/studio/adapters/FabricAdapter"
 import { MotionEngine } from "@/lib/studio/engine/MotionEngine"
 import { useStudioStore } from "@/store/useStudioStore"
 import { Loader2 } from "lucide-react"
+import { AssetClassifier } from "@/lib/studio/ai/AssetClassifier"
 
 export function StudioCanvasArea() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -30,6 +31,9 @@ export function StudioCanvasArea() {
     // Acopla o MotionEngine
     const motion = MotionEngine.getInstance()
     motion.attachRenderEngine(adapter)
+    
+    // Inicia o Classificador de IA em Background
+    AssetClassifier.getInstance().startListening()
 
     // Handle Window Resize
     const handleResize = () => {
