@@ -9,7 +9,11 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 export default function CampaignBuilderPage() {
-  const { status, startCampaign, resetCampaign, cutoutUrl, analysis, copywriting, generatedAssets, originalFile, error, isGeneratingBanners, generateAIBanners } = useCampaignStore();
+  const { 
+    status, error, isGeneratingBanners, 
+    generatedAssets, analysis, copywriting, cutoutUrl, userPrompt,
+    startCampaign, resetCampaign, generateAIBanners, setUserPrompt 
+  } = useCampaignStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,8 +184,17 @@ export default function CampaignBuilderPage() {
                           )}
                           <img src={cutoutUrl!} className={cn("relative z-10 w-full h-full object-contain p-4 drop-shadow-2xl transition-all duration-700 mix-blend-multiply", feedAsset?.bgUrl ? "scale-90" : "scale-100")} alt="Feed" />
                           {feedAsset?.overlayText && (
-                            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-16 pb-6 px-4 z-20">
-                              <h1 className="text-white font-bold text-lg md:text-xl leading-tight text-center tracking-wide drop-shadow-md">
+                            <div className={cn(
+                              "absolute left-0 w-full px-4 z-20",
+                              feedAsset.designTokens?.alignment === "top" ? "top-0 bg-gradient-to-b pt-6 pb-16" :
+                              feedAsset.designTokens?.alignment === "center" ? "top-1/2 -translate-y-1/2 bg-black/40 py-6" :
+                              "bottom-0 bg-gradient-to-t pt-16 pb-6",
+                              "from-black/80 via-black/40 to-transparent"
+                            )}>
+                              <h1 
+                                className="font-bold text-lg md:text-xl leading-tight text-center tracking-wide drop-shadow-md"
+                                style={{ color: feedAsset.designTokens?.textColor || "#FFFFFF" }}
+                              >
                                 {feedAsset.overlayText}
                               </h1>
                             </div>
@@ -222,8 +235,17 @@ export default function CampaignBuilderPage() {
                           )}
                           <img src={cutoutUrl!} className={cn("relative z-10 w-full h-full object-contain p-2 drop-shadow-2xl transition-all duration-700 mix-blend-multiply", storyAsset?.bgUrl ? "scale-90 translate-y-12" : "scale-100")} alt="Story" />
                           {storyAsset?.overlayText && (
-                            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-20 pb-8 px-4 z-20 flex flex-col items-center">
-                              <h1 className="text-white font-bold text-base leading-tight text-center tracking-wide mb-4 drop-shadow-md">
+                            <div className={cn(
+                              "absolute left-0 w-full px-4 z-20 flex flex-col items-center",
+                              storyAsset.designTokens?.alignment === "top" ? "top-0 bg-gradient-to-b pt-12 pb-20" :
+                              storyAsset.designTokens?.alignment === "center" ? "top-1/2 -translate-y-1/2 bg-black/40 py-10" :
+                              "bottom-0 bg-gradient-to-t pt-20 pb-8",
+                              "from-black/90 via-black/50 to-transparent"
+                            )}>
+                              <h1 
+                                className="font-bold text-base leading-tight text-center tracking-wide mb-4 drop-shadow-md"
+                                style={{ color: storyAsset.designTokens?.textColor || "#FFFFFF" }}
+                              >
                                 {storyAsset.overlayText}
                               </h1>
                               <div className="mt-2 text-white/95 text-[10px] font-bold bg-white/20 border border-white/30 inline-flex items-center justify-center px-4 py-2 rounded-full backdrop-blur-md uppercase tracking-widest shadow-lg">

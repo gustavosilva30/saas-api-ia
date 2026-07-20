@@ -19,6 +19,10 @@ export interface CampaignCopy {
     facebook: string;
   };
   seoKeywords: string[];
+  designTokens: {
+    textColor: string;
+    alignment: "top" | "bottom" | "center";
+  };
 }
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -74,12 +78,16 @@ const getMockCopy = async (category: string): Promise<CampaignCopy> => {
       facebook: "Procurando por qualidade e durabilidade? Nosso novo modelo de categoria premium acaba de chegar no estoque. Aproveite as condições de parcelamento em até 12x sem juros no cartão. Clique em 'Saiba Mais'!",
       mercadolivre: "PRODUTO NOVO | PRONTA ENTREGA | GARANTIA\n\nCaracterísticas principais:\n- Alta resistência\n- Acabamento profissional\n\n*Envio imediato pelo Mercado Envios Full.*"
     },
-    seoKeywords: ["comprar online", "melhor preço", "qualidade premium", category.toLowerCase()]
+    seoKeywords: ["comprar online", "melhor preço", "qualidade premium", category.toLowerCase()],
+    designTokens: {
+      textColor: category === "Acessórios Premium" ? "#FFD700" : "#FFFFFF",
+      alignment: "bottom"
+    }
   };
 };
 
 export const campaignAI = {
-  async analyzeProduct(imageFile: File): Promise<ProductAnalysis> {
+  async analyzeProduct(imageFile: File, userPrompt?: string): Promise<ProductAnalysis> {
     const { googleKey } = useTenantStore.getState();
     
     if (!googleKey) {
@@ -91,7 +99,7 @@ export const campaignAI = {
       const base64Data = await fileToBase64(imageFile);
       const mimeType = imageFile.type || "image/jpeg";
 
-      const prompt = `Analise a imagem em anexo. 
+      const prompt = `Analise a imagem em anexo. ${userPrompt ? `O criador também disse sobre o produto: "${userPrompt}".` : ""}
       Responda EXATAMENTE em formato JSON com as seguintes chaves:
       "category": string curta descrevendo a categoria exata do produto.
       "recommendedBgStyle": uma destas opções exatas: "studio_white", "dark_dramatic", "lifestyle_outdoor", "industrial" (escolha a que mais combina).
@@ -129,7 +137,7 @@ export const campaignAI = {
     }
   },
 
-  async generateCopywriting(category: string): Promise<CampaignCopy> {
+  async generateCopywriting(category: string, userPrompt?: string): Promise<CampaignCopy> {
     const { googleKey } = useTenantStore.getState();
 
     if (!googleKey) {
@@ -138,8 +146,9 @@ export const campaignAI = {
     }
 
     try {
-      const prompt = `Você é um copywriter especialista de alta conversão.
-      Crie uma estrutura de vendas (Copywriting) para um produto da categoria "${category}".
+      const prompt = `Você é um copywriter e diretor de arte especialista de alta conversão.
+      Crie uma estrutura de vendas e defina o design visual para um produto da categoria "${category}".
+      ${userPrompt ? `O criador deu as seguintes instruções de estilo/contexto: "${userPrompt}". Use isso para guiar o tom e o visual (designTokens).` : ""}
       
       Responda EXATAMENTE em formato JSON puro, seguindo este formato rigorosamente:
       {
@@ -154,7 +163,11 @@ export const campaignAI = {
           "mercadolivre": "texto mais direto, enfatizando pronta entrega, envio, novo",
           "facebook": "texto descritivo para topo ou meio de funil com CTA"
         },
-        "seoKeywords": ["keyword1", "keyword2", "keyword3"]
+        "seoKeywords": ["keyword1", "keyword2", "keyword3"],
+        "designTokens": {
+          "textColor": "código HEX da cor ideal (ex: #FFFFFF ou #FFD700)",
+          "alignment": "escolha 'top' ou 'bottom' ou 'center' baseando-se no produto"
+        }
       }
       
       IMPORTANTE: Retorne APENAS o JSON válido.`;

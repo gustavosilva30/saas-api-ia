@@ -11,6 +11,10 @@ export interface GeneratedAsset {
   url: string;
   bgUrl?: string; // Fundo gerado por IA
   overlayText?: string; // Texto promocional da IA
+  designTokens?: {
+    textColor: string;
+    alignment: "top" | "bottom" | "center";
+  };
 }
 
 export interface CampaignState {
@@ -22,7 +26,9 @@ export interface CampaignState {
   generatedAssets: GeneratedAsset[];
   error: string | null;
   isGeneratingBanners: boolean;
+  userPrompt: string;
   
+  setUserPrompt: (prompt: string) => void;
   startCampaign: (file: File) => Promise<void>;
   resetCampaign: () => void;
   generateAIBanners: () => Promise<void>;
@@ -54,7 +60,9 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
   generatedAssets: [],
   error: null,
   isGeneratingBanners: false,
+  userPrompt: "",
 
+  setUserPrompt: (prompt) => set({ userPrompt: prompt }),
   resetCampaign: () => set({
     status: "idle",
     originalFile: null,
@@ -63,7 +71,8 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
     copywriting: null,
     generatedAssets: [],
     error: null,
-    isGeneratingBanners: false
+    isGeneratingBanners: false,
+    userPrompt: ""
   }),
 
   generateAIBanners: async () => {
@@ -81,7 +90,11 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
       try {
         console.log("Acionando Nano Banana (Gemini Image) no Google AI Studio...");
         
-        const prompt = `A highly aesthetic, professional studio photography background designed for a ${categoryName} advertisement. Style: ${style}. Clean, photorealistic, empty center space for product placement, highly detailed, visually stunning, no text, no watermarks, 8k resolution.`;
+        const prompt = `A highly aesthetic, professional studio photography background designed for a ${title} (Category: ${style}). 
+    ${userPrompt ? `User instructions: ${userPrompt}.` : ""}
+    It should be clean, with perfect studio lighting, soft shadows, and a premium vibe. 
+    Do NOT include the product itself, just the empty setting ready for the product to be placed. 
+    No text, no watermarks, completely photorealistic and highly detailed. 8k resolution, award winning photography.`;
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${googleKey}`, {
           method: "POST",
@@ -137,7 +150,8 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
     const updatedAssets = state.generatedAssets.map((asset, idx) => ({
       ...asset,
       bgUrl: bgs[idx % bgs.length],
-      overlayText: asset.format === 'mercadolivre' ? "" : title
+      overlayText: asset.format === 'mercadolivre' ? "" : title,
+      designTokens: state.copywriting?.designTokens
     }));
 
     set({ generatedAssets: updatedAssets, isGeneratingBanners: false });
@@ -176,7 +190,7 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
         analysisData = typeof analyzeResult.result_data === 'string' ? JSON.parse(analyzeResult.result_data) : analyzeResult.result_data;
       } catch (e) {
          console.warn("Falha no Job de Análise visual, acionando Fallback DEV", e);
-         analysisData = await campaignAI.analyzeProduct(file);
+         analysisData = await campaignAI.analyzeProduct(file, get().userPrompt);
       }
       set({ analysis: analysisData, status: "generating_copy" });
 
@@ -188,7 +202,7 @@ export const useCampaignStore = create<CampaignState>((set, get) => ({
         copyData = typeof copyResult.result_data === 'string' ? JSON.parse(copyResult.result_data) : copyResult.result_data;
       } catch(e) {
         console.warn("Falha no Job de Copy, acionando Fallback DEV", e);
-        copyData = await campaignAI.generateCopywriting(analysisData.category);
+        copyData = await campaignAI.generateCopywriting(analysisData.category, get().userPrompt);
       }
       set({ copywriting: copyData, status: "assembling_assets" });
 
