@@ -27,6 +27,10 @@ interface StudioState {
   activePlugin: string | null;
   setActivePlugin: (pluginId: string | null) => void;
   
+  // Objeto Selecionado
+  selectedObjectId: string | null;
+  selectedObjectType: string | null;
+  
   // Estado de IA
   isProcessingAI: boolean;
   setProcessingAI: (isProcessing: boolean) => void;
@@ -62,6 +66,19 @@ export const useStudioStore = create<StudioState>((set) => {
     }
   })
 
+  EventBus.on(StudioEvent.OBJECT_SELECTED, (selectedObjects: any[]) => {
+    if (selectedObjects && selectedObjects.length === 1) {
+      const obj = selectedObjects[0];
+      set({ selectedObjectId: obj.id || null, selectedObjectType: obj.type || null });
+    } else {
+      set({ selectedObjectId: null, selectedObjectType: null });
+    }
+  })
+
+  EventBus.on(StudioEvent.SELECTION_CLEARED, () => {
+    set({ selectedObjectId: null, selectedObjectType: null });
+  })
+
   return {
     engine: null,
     isReady: false,
@@ -69,6 +86,8 @@ export const useStudioStore = create<StudioState>((set) => {
     pan: { x: 0, y: 0 },
     layers: [],
     activePlugin: null,
+    selectedObjectId: null,
+    selectedObjectType: null,
     
     setEngine: (engine) => set({ engine }),
     setReady: (ready) => set({ isReady: ready }),

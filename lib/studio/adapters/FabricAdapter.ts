@@ -210,6 +210,52 @@ export class FabricAdapter implements IRenderEngine {
     });
   }
 
+  getSelectedObjectImageUrl(): string | null {
+    if (!this.canvas) return null;
+    const activeObject = this.canvas.getActiveObject();
+    if (activeObject && activeObject.type === 'image') {
+      return (activeObject as fabric.Image).getSrc() || null;
+    }
+    return null;
+  }
+
+  updateObjectImageUrl(id: string, url: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.canvas) return reject("Canvas not initialized");
+      const objects = this.canvas.getObjects() as any[];
+      const target = objects.find(o => o.id === id) as fabric.Image;
+      
+      if (!target || target.type !== 'image') {
+        return reject("Object not found or not an image");
+      }
+
+      // Salva o tamanho antigo para recalcular escala se necessário
+      const oldWidth = target.width || 1;
+      const oldHeight = target.height || 1;
+      const oldScaleX = target.scaleX || 1;
+      const oldScaleY = target.scaleY || 1;
+      const visualWidth = oldWidth * oldScaleX;
+      const visualHeight = oldHeight * oldScaleY;
+
+      target.setSrc(url, (img) => {
+        if (!img) return reject("Failed to load new image");
+        
+        // Mantém a proporção e o tamanho visual antigo
+        if (img.width && img.height) {
+          // Precisamos ajustar o scale para que a nova imagem ocupe o mesmo espaço visual (aproximadamente)
+          // Isso ajuda caso a imagem sem fundo venha com um crop diferente, mas geralmente tem o mesmo tamanho.
+          const newScaleX = visualWidth / img.width;
+          const newScaleY = visualHeight / img.height;
+          img.set({ scaleX: newScaleX, scaleY: newScaleY });
+        }
+        
+        this.canvas!.requestRenderAll();
+        EventBus.emit(StudioEvent.OBJECT_MODIFIED, img);
+        resolve();
+      }, { crossOrigin: 'anonymous' });
+    });
+  }
+
   removeObject(id: string): void {
     if (!this.canvas) return;
     const objects = this.canvas.getObjects() as any[];

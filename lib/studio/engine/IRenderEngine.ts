@@ -57,6 +57,16 @@ export interface IRenderEngine {
   addImageFromUrl(url: string): Promise<string>;
 
   /**
+   * Retorna a URL da imagem base do objeto selecionado.
+   */
+  getSelectedObjectImageUrl(): string | null;
+
+  /**
+   * Atualiza a URL da imagem de um objeto existente (mantendo posição, escala, etc).
+   */
+  updateObjectImageUrl(id: string, url: string): Promise<void>;
+
+  /**
    * Remove um objeto pelo ID.
    */
   removeObject(id: string): void;
