@@ -31,10 +31,27 @@ export class MotionEngine {
   public attachRenderEngine(engine: IRenderEngine) {
     this.renderEngine = engine;
     
+    // Sync existing layers (ex: Auto-Save / Init)
+    const layers = engine.getLayers();
+    layers.forEach(layer => {
+      const props = engine.getObjectProperties(layer.id);
+      if (props) {
+        this.animatedLayers.set(layer.id, {
+          startY: props.top ?? 0,
+          startX: props.left ?? 0,
+          startOpacity: props.opacity ?? 1,
+          startScaleX: props.scaleX ?? 1,
+          startScaleY: props.scaleY ?? 1,
+        });
+      }
+    });
+    
+    // Zustand plain subscribe
     this.unsubscribeTimeline = useTimelineStore.subscribe(
-      (state) => state.currentTime,
-      (currentTime) => {
-        this.updateFrame(currentTime);
+      (state, prevState) => {
+        if (state.currentTime !== prevState.currentTime) {
+          this.updateFrame(state.currentTime);
+        }
       }
     );
   }
@@ -49,6 +66,23 @@ export class MotionEngine {
 
   private setupEvents() {
     EventBus.on(StudioEvent.OBJECT_ADDED, (obj: any) => {
+      if (obj && obj.id && this.renderEngine) {
+        const props = this.renderEngine.getObjectProperties(obj.id);
+        if (props) {
+          this.animatedLayers.set(obj.id, {
+            startY: props.top ?? 0,
+            startX: props.left ?? 0,
+            startOpacity: props.opacity ?? 1,
+            startScaleX: props.scaleX ?? 1,
+            startScaleY: props.scaleY ?? 1,
+          });
+        }
+      }
+    });
+
+    EventBus.on(StudioEvent.OBJECT_MODIFIED, (obj: any) => {
+      if (useTimelineStore.getState().isPlaying) return; // Não substitui estado base se estiver animando
+      
       if (obj && obj.id && this.renderEngine) {
         const props = this.renderEngine.getObjectProperties(obj.id);
         if (props) {
