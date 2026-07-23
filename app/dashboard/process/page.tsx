@@ -1,3 +1,4 @@
+"use client"
 import { redirect } from "next/navigation"
 import { useState, useRef, useEffect } from "react"
 import { Upload, ImageIcon, Download, RefreshCw } from "lucide-react"
