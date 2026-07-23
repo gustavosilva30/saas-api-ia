@@ -1,3 +1,5 @@
+import { StudioDocument } from '../core/models/DocumentModels';
+
 export interface LayerInfo {
   id: string;
   type: string;
@@ -84,6 +86,16 @@ export interface IRenderEngine {
   }): string;
 
   /**
+   * Adiciona uma forma primitiva geométrica.
+   */
+  addShape(type: 'rect' | 'circle' | 'polygon' | 'line' | 'arrow', options?: any): string;
+
+  /**
+   * Ativa um modo de desenho livre (pincel, borracha, caneta).
+   */
+  setDrawingMode(mode: 'pencil' | 'eraser' | 'pen' | 'none', options?: { color?: string; width?: number }): void;
+
+  /**
    * Atualiza propriedades numéricas/visuais de um objeto (usado pelo Motion Engine).
    */
   updateObjectProperties(id: string, properties: any): void;
@@ -122,7 +134,7 @@ export interface IRenderEngine {
   // Exportação
   exportImage(options?: { format?: "png" | "jpeg"; quality?: number; multiplier?: number }): string;
 
-  // Persistência de Estado
-  exportState(): string;
-  loadState(stateJson: string): Promise<void>;
+  // Persistência de Estado (Document Model)
+  exportDocument(): StudioDocument;
+  loadDocument(document: StudioDocument): Promise<void>;
 }

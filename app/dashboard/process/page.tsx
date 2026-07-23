@@ -1,5 +1,4 @@
-"use client"
-
+import { redirect } from "next/navigation"
 import { useState, useRef, useEffect } from "react"
 import { Upload, ImageIcon, Download, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -12,6 +11,7 @@ import { cn } from "@/lib/utils"
 type BgColor = "transparent" | "white" | "black" | "gray"
 
 export default function ProcessPage() {
+  redirect("/studio")
   const [file, setFile] = useState<File | null>(null)
   const [originalUrl, setOriginalUrl] = useState<string | null>(null)
   const [resultUrl, setResultUrl] = useState<string | null>(null)

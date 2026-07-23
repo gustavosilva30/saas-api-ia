@@ -307,6 +307,25 @@ export class FabricAdapter implements IRenderEngine {
     return id;
   }
 
+  addShape(type: 'rect' | 'circle' | 'polygon' | 'line' | 'arrow', options?: any): string {
+    if (!this.canvas) return "";
+    const id = uuidv4();
+    // TODO: Instanciar a forma no Fabric.js correspondente na Etapa 2
+    return id;
+  }
+
+  setDrawingMode(mode: 'pencil' | 'eraser' | 'pen' | 'none', options?: { color?: string; width?: number }): void {
+    if (!this.canvas) return;
+    if (mode === 'none') {
+      this.canvas.isDrawingMode = false;
+    } else {
+      this.canvas.isDrawingMode = true;
+      // TODO: Configurar o brush (PencilBrush, EraserBrush) baseado no mode
+      if (options?.color) this.canvas.freeDrawingBrush.color = options.color;
+      if (options?.width) this.canvas.freeDrawingBrush.width = options.width;
+    }
+  }
+
   updateObjectProperties(id: string, properties: any): void {
     if (!this.canvas) return;
     const objects = this.canvas.getObjects() as any[];
@@ -515,28 +534,53 @@ export class FabricAdapter implements IRenderEngine {
     });
   }
 
-  // --- Persistência de Estado (Auto-Save) ---
+  // --- Persistência de Estado (Document Model) ---
 
-  exportState(): string {
-    if (!this.canvas) return "";
-    // Exportamos a tela junto com a propriedade customizada 'id' e filtros
+  exportDocument(): any {
+    if (!this.canvas) return null;
+    // Em uma implementação madura, nós iteramos o JSON gerado pelo Fabric e 
+    // montamos um objeto conforme StudioDocument.Pages[0].layers
     const json = this.canvas.toJSON(['id']);
-    return JSON.stringify(json);
+    return {
+      schemaVersion: "v2.0.0",
+      id: "doc-exported",
+      name: "Documento Exportado",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      pages: [
+        {
+          id: "page-1",
+          name: "Page 1",
+          width: this.canvas.width || 800,
+          height: this.canvas.height || 600,
+          layers: json.objects
+        }
+      ],
+      assets: [],
+      styles: [],
+      variables: [],
+      metadata: {}
+    };
   }
 
-  loadState(stateJson: string): Promise<void> {
+  loadDocument(document: any): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.canvas || this.isDestroyed) return reject("Canvas not initialized");
+      if (!document || !document.pages || document.pages.length === 0) return resolve();
       
+      const page = document.pages[0];
       try {
-        const json = JSON.parse(stateJson);
-        this.canvas.loadFromJSON(json, () => {
+        const fabricJson = {
+          version: "5.3.0",
+          objects: page.layers
+        };
+        this.canvas.loadFromJSON(fabricJson, () => {
           if (this.isDestroyed || !this.canvas) return reject("Canvas disposed during load");
           this.canvas.requestRenderAll();
           resolve();
         });
       } catch (err) {
-        console.error("Failed to load canvas state", err);
+        console.error("Failed to load document", err);
         reject(err);
       }
     });

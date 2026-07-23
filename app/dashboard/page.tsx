@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import * as React from "react"
-import { ImageIcon, Layers, FileImage, Cpu } from "lucide-react"
+import { ImageIcon, Layers, FileImage, Cpu, Palette } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -40,9 +40,9 @@ export default function DashboardPage() {
           <Layers data-icon="inline-start" />
           Lote
         </Button>
-        <Button render={<Link href="/dashboard/process" />}>
-          <ImageIcon data-icon="inline-start" />
-          Processar imagem
+        <Button render={<Link href="/studio" />}>
+          <Palette data-icon="inline-start" />
+          Studio Profissional
         </Button>
       </PageHeader>
 

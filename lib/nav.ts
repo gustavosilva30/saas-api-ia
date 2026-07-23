@@ -1,6 +1,5 @@
 import {
   LayoutDashboard,
-  ImageIcon,
   Layers,
   History,
   Code2,
@@ -39,7 +38,6 @@ export const navSections: NavSection[] = [
     items: [
       { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { title: "AI Studio Hub", href: "/dashboard/hub", icon: ShoppingBag, badge: "Loja" },
-      { title: "Processar imagens", href: "/dashboard/process", icon: ImageIcon },
       { title: "Processamento em lote", href: "/dashboard/batch", icon: Layers },
       { title: "Campaign Builder", href: "/dashboard/campaigns", icon: Sparkles, badge: "Novo" },
       { title: "Histórico", href: "/dashboard/history", icon: History },
@@ -83,7 +81,6 @@ export const navSections: NavSection[] = [
 export const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/dashboard/hub": "AI Studio Hub",
-  "/dashboard/process": "Processar imagens",
   "/dashboard/batch": "Processamento em lote",
   "/dashboard/campaigns": "Campaign Builder",
   "/dashboard/history": "Histórico",
