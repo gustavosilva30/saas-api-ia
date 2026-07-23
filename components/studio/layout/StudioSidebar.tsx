@@ -1,3 +1,4 @@
+"use client"
 import React, { useState } from "react"
 import { useStudioStore } from "@/store/useStudioStore"
 import { PluginManager } from "@/lib/studio/plugins/PluginManager"
