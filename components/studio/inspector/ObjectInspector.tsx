@@ -1,3 +1,4 @@
+"use client"
 import React from "react"
 import { useSelectionStore } from "@/store/useSelectionStore"
 import { useStudioStore } from "@/store/useStudioStore"

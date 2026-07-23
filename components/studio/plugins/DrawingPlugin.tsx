@@ -1,3 +1,4 @@
+"use client"
 import React from "react"
 import { Pencil, Eraser, PenTool, MousePointer2 } from "lucide-react"
 import { StudioPlugin } from "@/lib/studio/sdk/PluginSDK"

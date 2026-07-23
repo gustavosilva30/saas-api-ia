@@ -1,3 +1,4 @@
+"use client"
 import React, { useEffect, useState } from "react"
 import { Layers, ArrowUp, ArrowDown, Trash2, Eye, EyeOff, Lock, Unlock } from "lucide-react"
 import { StudioPlugin } from "@/lib/studio/sdk/PluginSDK"
