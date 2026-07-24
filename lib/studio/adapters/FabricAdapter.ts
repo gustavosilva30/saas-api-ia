@@ -550,9 +550,115 @@ export class FabricAdapter implements IRenderEngine {
     const objects = this.canvas.getObjects();
     return objects.map((obj, index) => ({
       id: (obj as any).id || "unknown",
-      type: obj.type || "object",
-      zIndex: index
+      type: (obj as any).isAdjustmentLayer ? `Ajuste: ${ (obj as any).adjustmentType }` : (obj.type || "object"),
+      zIndex: index,
+      isAdjustmentLayer: (obj as any).isAdjustmentLayer,
+      adjustmentType: (obj as any).adjustmentType,
+      adjustmentValue: (obj as any).adjustmentValue
     })).reverse();
+  }
+
+  addAdjustmentLayer(type: 'brightness' | 'contrast' | 'saturation' | 'hue', value: number): string {
+    if (!this.canvas) return "";
+    const id = uuidv4();
+    
+    // Objeto Fabric transparente que servirá como placeholder visual e âncora da camada de ajuste
+    const adjLayer = new fabric.Rect({
+      left: 40,
+      top: 40,
+      width: 120,
+      height: 40,
+      fill: "rgba(139, 92, 246, 0.15)", // Lilás translúcido
+      stroke: "#8b5cf6",
+      strokeWidth: 1.5,
+      rx: 6,
+      ry: 6,
+      cornerColor: '#8b5cf6',
+      cornerStyle: 'circle',
+      borderColor: '#8b5cf6',
+      transparentCorners: false,
+    } as any);
+
+    // Guardar os metadados da camada de ajuste
+    (adjLayer as any).id = id;
+    (adjLayer as any).isAdjustmentLayer = true;
+    (adjLayer as any).adjustmentType = type;
+    (adjLayer as any).adjustmentValue = value;
+
+    this.canvas.add(adjLayer);
+    this.canvas.setActiveObject(adjLayer);
+    this.propagateAdjustmentLayers();
+    this.canvas.requestRenderAll();
+    
+    EventBus.emit(StudioEvent.OBJECT_ADDED, adjLayer);
+    return id;
+  }
+
+  updateAdjustmentLayer(id: string, value: number): void {
+    if (!this.canvas) return;
+    const obj = this.canvas.getObjects().find((o: any) => o.id === id);
+    if (obj && (obj as any).isAdjustmentLayer) {
+      (obj as any).adjustmentValue = value;
+      this.propagateAdjustmentLayers();
+      this.canvas.requestRenderAll();
+      EventBus.emit(StudioEvent.OBJECT_MODIFIED, obj);
+    }
+  }
+
+  /**
+   * Varre a pilha de camadas do canvas de baixo para cima, aplicando as camadas de ajuste
+   * aos objetos posicionados abaixo delas de forma não-destrutiva.
+   */
+  private propagateAdjustmentLayers(): void {
+    if (!this.canvas) return;
+    const objects = this.canvas.getObjects();
+
+    // 1. Resetar temporariamente os filtros de todos os objetos normais para seus valores base ou cacheados
+    objects.forEach(obj => {
+      if (!(obj as any).isAdjustmentLayer && obj.type === 'image' && (obj as any).filters) {
+        // Se houver ajustes manuais diretos do objeto no adjustmentsCache, mantemos eles, caso contrário limpa
+        const baseAdjustments = (obj as any)._adjustmentsCache || {};
+        const filterTypes = ['brightness', 'contrast', 'saturation', 'hue', 'blur', 'noise', 'pixelate'];
+        
+        // Remove todos os filtros de imagem que foram criados por camadas de ajuste
+        obj.filters = obj.filters.filter(f => f && !(f as any).fromAdjustmentLayer);
+      }
+    });
+
+    // 2. Aplicar os ajustes de cada AdjustmentLayer aos objetos que estão abaixo dela
+    for (let i = 0; i < objects.length; i++) {
+      const currentObj = objects[i];
+      if ((currentObj as any).isAdjustmentLayer) {
+        const type = (currentObj as any).adjustmentType;
+        const val = (currentObj as any).adjustmentValue;
+
+        // Itera por todos os objetos abaixo desta camada (índice menor)
+        for (let j = 0; j < i; j++) {
+          const targetObj = objects[j];
+          if (!(targetObj as any).isAdjustmentLayer && targetObj.type === 'image') {
+            const img = targetObj as fabric.Image;
+            if (!img.filters) img.filters = [];
+
+            let newFilter = null;
+            if (type === 'brightness') {
+              newFilter = new fabric.Image.filters.Brightness({ brightness: val });
+            } else if (type === 'contrast') {
+              newFilter = new fabric.Image.filters.Contrast({ contrast: val });
+            } else if (type === 'saturation') {
+              newFilter = new fabric.Image.filters.Saturation({ saturation: val });
+            } else if (type === 'hue') {
+              newFilter = new fabric.Image.filters.HueRotation({ rotation: val });
+            }
+
+            if (newFilter) {
+              (newFilter as any).fromAdjustmentLayer = true; // Flag para podermos remover/recalcular
+              img.filters.push(newFilter);
+              img.applyFilters();
+            }
+          }
+        }
+      }
+    }
   }
 
   bringForward(id: string): void {
@@ -560,6 +666,7 @@ export class FabricAdapter implements IRenderEngine {
     const obj = this.canvas.getObjects().find((o: any) => o.id === id);
     if (obj) {
       this.canvas.bringForward(obj);
+      this.propagateAdjustmentLayers();
       this.canvas.requestRenderAll();
       EventBus.emit(StudioEvent.OBJECT_MODIFIED, obj);
     }
@@ -570,6 +677,7 @@ export class FabricAdapter implements IRenderEngine {
     const obj = this.canvas.getObjects().find((o: any) => o.id === id);
     if (obj) {
       this.canvas.sendBackwards(obj);
+      this.propagateAdjustmentLayers();
       this.canvas.requestRenderAll();
       EventBus.emit(StudioEvent.OBJECT_MODIFIED, obj);
     }
@@ -709,19 +817,40 @@ export class FabricAdapter implements IRenderEngine {
     }
   }
 
-  // --- Export ---
-
-  exportImage(options?: { format?: "png" | "jpeg"; quality?: number; multiplier?: number }): string {
+  exportImage(options?: { format?: "png" | "jpeg" | "webp"; quality?: number; multiplier?: number }): string {
     if (!this.canvas) return "";
     
     // Remover seleção antes de exportar
     this.canvas.discardActiveObject();
     this.canvas.requestRenderAll();
+    
+    const format = options?.format || "png";
+    const multiplier = options?.multiplier || 2;
+    const quality = options?.quality || 0.92;
+
+    if (format === "webp") {
+      // Para WebP, exportamos como PNG do fabric (já na resolução com multiplier) e convertemos usando um canvas HTML temporário
+      const tempCanvas = document.createElement("canvas");
+      const fabricCanvasEl = this.canvas.getElement();
+      
+      const width = (this.canvas.width || 800) * multiplier;
+      const height = (this.canvas.height || 600) * multiplier;
+      
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      
+      const ctx = tempCanvas.getContext("2d");
+      if (ctx) {
+        // Renderiza o canvas do Fabric na escala correta
+        ctx.drawImage(fabricCanvasEl, 0, 0, width, height);
+      }
+      return tempCanvas.toDataURL("image/webp", quality);
+    }
 
     return this.canvas.toDataURL({
-      format: options?.format || "png",
-      quality: options?.quality || 1,
-      multiplier: options?.multiplier || 2 // Alta resolução (800x600 -> 1600x1200)
+      format: format,
+      quality: quality,
+      multiplier: multiplier
     });
   }
 
@@ -775,5 +904,284 @@ export class FabricAdapter implements IRenderEngine {
         reject(err);
       }
     });
+  // --- Vector & Bezier Pen Tools ---
+  private _bezierPoints: any[] = [];
+  private _bezierLines: any[] = [];
+  private _isBezierActive = false;
+
+  startBezierPen(): void {
+    if (!this.canvas) return;
+    this._isBezierActive = true;
+    this._bezierPoints = [];
+    this._bezierLines = [];
+    this.canvas.selection = false;
+    this.canvas.defaultCursor = 'pen';
+    this.canvas.discardActiveObject();
+    this.canvas.requestRenderAll();
+
+    // Evento de clique para adicionar nós
+    this.canvas.on('mouse:down', this.handleBezierClick.bind(this));
+  }
+
+  stopBezierPen(): void {
+    if (!this.canvas) return;
+    this._isBezierActive = false;
+    this.canvas.off('mouse:down', this.handleBezierClick.bind(this));
+    this.canvas.selection = true;
+    this.canvas.defaultCursor = 'default';
+
+    // Limpar nós e linhas temporárias
+    this._bezierPoints.forEach(p => this.canvas?.remove(p));
+    this._bezierLines.forEach(l => this.canvas?.remove(l));
+    this._bezierPoints = [];
+    this._bezierLines = [];
+    this.canvas.requestRenderAll();
+  }
+
+  private handleBezierClick(opt: any): void {
+    if (!this._isBezierActive || !this.canvas) return;
+    const pointer = this.canvas.getPointer(opt.e);
+    const x = pointer.x;
+    const y = pointer.y;
+
+    // Se o usuário clicar próximo ao ponto inicial e tivermos pelo menos 3 pontos, fecha a forma!
+    if (this._bezierPoints.length >= 3) {
+      const firstPt = this._bezierPoints[0];
+      const distance = Math.sqrt(Math.pow(x - firstPt.left, 2) + Math.pow(y - firstPt.top, 2));
+      if (distance < 15) {
+        this.closeBezierPath();
+        return;
+      }
+    }
+
+    // Criar ponto visual (âncora)
+    const anchor = new fabric.Circle({
+      left: x,
+      top: y,
+      radius: 4,
+      fill: '#8b5cf6',
+      stroke: '#ffffff',
+      strokeWidth: 1.5,
+      originX: 'center',
+      originY: 'center',
+      hasControls: false,
+      hasBorders: false,
+      selectable: false
+    });
+
+    this._bezierPoints.push(anchor);
+    this.canvas.add(anchor);
+
+    // Se houver ponto anterior, conecta com uma linha
+    if (this._bezierPoints.length > 1) {
+      const prevPt = this._bezierPoints[this._bezierPoints.length - 2];
+      const line = new fabric.Line([prevPt.left, prevPt.top, x, y], {
+        stroke: '#8b5cf6',
+        strokeWidth: 2,
+        selectable: false,
+        evented: false
+      });
+      this._bezierLines.push(line);
+      this.canvas.add(line);
+      // Garante que a linha fica abaixo dos pontos
+      line.sendToBack();
+    }
+    
+    this.canvas.requestRenderAll();
+  }
+
+  private closeBezierPath(): void {
+    if (!this.canvas || this._bezierPoints.length < 3) return;
+
+    // Gerar string do Path SVG
+    let pathData = `M ${this._bezierPoints[0].left} ${this._bezierPoints[0].top}`;
+    for (let i = 1; i < this._bezierPoints.length; i++) {
+      pathData += ` L ${this._bezierPoints[i].left} ${this._bezierPoints[i].top}`;
+    }
+    pathData += ' Z'; // Fecha o Path
+
+    const path = new fabric.Path(pathData, {
+      fill: 'rgba(139, 92, 246, 0.4)',
+      stroke: '#8b5cf6',
+      strokeWidth: 2,
+      id: uuidv4()
+    } as any);
+
+    // Adicionar o Path final ao canvas
+    this.canvas.add(path);
+    this.canvas.setActiveObject(path);
+
+    // Finalizar desenho e limpar temporários
+    this.stopBezierPen();
+    EventBus.emit(StudioEvent.OBJECT_ADDED, path);
+  }
+
+  applyBooleanOperation(type: 'union' | 'difference' | 'intersection'): void {
+    if (!this.canvas) return;
+    const activeObjects = this.canvas.getActiveObjects();
+    if (activeObjects.length < 2) {
+      const { toast } = require("sonner");
+      toast.error("Selecione pelo menos 2 formas geométricas para a operação booleana.");
+      return;
+    }
+
+    const baseObj = activeObjects[0];
+    const targetObj = activeObjects[1];
+
+    if (type === 'union') {
+      // União via agrupamento visual ou globalCompositeOperation
+      baseObj.globalCompositeOperation = 'source-over';
+      const group = new fabric.Group(activeObjects.map(o => {
+        // Clonamos para segurança
+        let clone: any;
+        o.clone(c => clone = c);
+        return clone;
+      }), {
+        id: uuidv4()
+      } as any);
+      
+      activeObjects.forEach(o => this.canvas?.remove(o));
+      this.canvas.add(group);
+      this.canvas.setActiveObject(group);
+    } else if (type === 'difference') {
+      // Subtração (source-out / destination-out)
+      targetObj.set({ globalCompositeOperation: 'destination-out' });
+      const group = new fabric.Group([baseObj, targetObj].map(o => {
+        let clone: any;
+        o.clone(c => clone = c);
+        return clone;
+      }), {
+        id: uuidv4()
+      } as any);
+
+      activeObjects.forEach(o => this.canvas?.remove(o));
+      this.canvas.add(group);
+      this.canvas.setActiveObject(group);
+    } else if (type === 'intersection') {
+      // Interseção (source-in)
+      targetObj.set({ globalCompositeOperation: 'source-in' });
+      const group = new fabric.Group([baseObj, targetObj].map(o => {
+        let clone: any;
+        o.clone(c => clone = c);
+        return clone;
+      }), {
+        id: uuidv4()
+      } as any);
+
+      activeObjects.forEach(o => this.canvas?.remove(o));
+      this.canvas.add(group);
+      this.canvas.setActiveObject(group);
+    }
+
+    this.canvas.requestRenderAll();
+    EventBus.emit(StudioEvent.HISTORY_CHANGED);
+  }
+
+  // --- Inpainting & Generative Fill Brush ---
+  private _inpaintPaths: any[] = [];
+  private _isInpaintBrushActive = false;
+
+  startInpaintBrush(): void {
+    if (!this.canvas) return;
+    this._isInpaintBrushActive = true;
+    this._inpaintPaths = [];
+    this.canvas.isDrawingMode = true;
+    this.canvas.freeDrawingBrush.color = "rgba(239, 68, 68, 0.5)"; // Vermelho translúcido para a máscara
+    this.canvas.freeDrawingBrush.width = 24;
+    this.canvas.defaultCursor = 'crosshair';
+    
+    // Interceptar a criação de traços para guardá-los
+    this.canvas.on('path:created', this.handleInpaintPathCreated.bind(this));
+  }
+
+  stopInpaintBrush(): void {
+    if (!this.canvas) return;
+    this._isInpaintBrushActive = false;
+    this.canvas.isDrawingMode = false;
+    this.canvas.defaultCursor = 'default';
+    this.canvas.off('path:created', this.handleInpaintPathCreated.bind(this));
+    
+    // Remove os traços de máscara vermelhos do canvas
+    this._inpaintPaths.forEach(p => this.canvas?.remove(p));
+    this._inpaintPaths = [];
+    this.canvas.requestRenderAll();
+  }
+
+  private handleInpaintPathCreated(e: any): void {
+    if (this._isInpaintBrushActive && e.path) {
+      // Guardamos na lista temporária de máscara
+      this._inpaintPaths.push(e.path);
+    }
+  }
+
+  async getInpaintMaskAndImage(): Promise<{ imageFile: File, maskFile: File } | null> {
+    if (!this.canvas || this._inpaintPaths.length === 0) return null;
+    const activeObject = this.canvas.getActiveObject();
+    if (!activeObject || activeObject.type !== 'image') return null;
+
+    const img = activeObject as fabric.Image;
+
+    // 1. Exportar Imagem Base
+    const imgDataUrl = img.toDataURL({ format: 'png' });
+    const imgRes = await fetch(imgDataUrl);
+    const imgBlob = await imgRes.blob();
+    const imageFile = new File([imgBlob], 'input_image.png', { type: 'image/png' });
+
+    // 2. Renderizar Máscara (Preto e Branco)
+    // Criamos um canvas temporário do mesmo tamanho da imagem base
+    const width = img.width! * img.scaleX!;
+    const height = img.height! * img.scaleY!;
+    
+    const tempMaskCanvas = document.createElement('canvas');
+    tempMaskCanvas.width = width;
+    tempMaskCanvas.height = height;
+    
+    const ctx = tempMaskCanvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Pintar fundo de preto (área sem modificação)
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, width, height);
+
+    // Ajustar escala e desenhar cada traço em branco (área a modificar)
+    // Como os paths estão nas coordenadas globais do canvas, precisamos calcular a posição relativa ao objeto de imagem
+    const imgLeft = img.left || 0;
+    const imgTop = img.top || 0;
+
+    this._inpaintPaths.forEach(path => {
+      // Desenhar o path transladado para o canvas local
+      // Criamos um clone do path temporariamente nas coordenadas locais da imagem
+      let clone: any;
+      path.clone(c => clone = c);
+      if (clone) {
+        // Renderizamos o path no contexto do canvas temporário pintando de branco
+        // Para simplificar e garantir 100% de precisão de pixels:
+        // Usamos globalCompositeOperation = 'source-over' e desenhamos em branco
+        const pathCanvas = document.createElement('canvas');
+        pathCanvas.width = this.canvas!.width!;
+        pathCanvas.height = this.canvas!.height!;
+        const pCtx = pathCanvas.getContext('2d');
+        if (pCtx) {
+          pCtx.fillStyle = '#000000';
+          pCtx.fillRect(0, 0, pathCanvas.width, pathCanvas.height);
+          // Adicionamos o path no canvas temporário com fill/stroke branco
+          const tempFabricCanvas = new fabric.Canvas(pathCanvas);
+          clone.set({ fill: '#ffffff', stroke: '#ffffff' });
+          tempFabricCanvas.add(clone);
+          tempFabricCanvas.renderAll();
+          
+          // Agora desenhamos este fragmento no canvas de destino recortado
+          ctx.drawImage(pathCanvas, imgLeft - (width/2), imgTop - (height/2), width, height, 0, 0, width, height);
+          tempFabricCanvas.dispose();
+        }
+      }
+    });
+
+    const maskDataUrl = tempMaskCanvas.toDataURL('image/png');
+    const maskRes = await fetch(maskDataUrl);
+    const maskBlob = await maskRes.blob();
+    const maskFile = new File([maskBlob], 'mask.png', { type: 'image/png' });
+
+    return { imageFile, maskFile };
   }
 }

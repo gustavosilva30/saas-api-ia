@@ -26,8 +26,6 @@ import requests
 import asyncio
 import io
 from PIL import Image, ImageFilter, ImageEnhance, ImageDraw
-import torch
-from transformers import CLIPModel, CLIPProcessor
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -863,6 +861,8 @@ clip_processor = None
 def get_clip():
     global clip_model, clip_processor
     if clip_model is None:
+        import torch
+        from transformers import CLIPModel, CLIPProcessor
         clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
     return clip_model, clip_processor
@@ -876,6 +876,7 @@ def vision_analyze_real(input_image_bytes: bytes) -> dict:
         return vision_analyze_mock(input_image_bytes)
 
     model, processor = get_clip()
+    import torch
     image = Image.open(io.BytesIO(input_image_bytes)).convert("RGB")
 
     # Classificação zero-shot da categoria
@@ -1031,19 +1032,21 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
             result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
 
         elif job_type == 'inpaint':
-            # Simulação do LaMa (big-lama ONNX)
-            # Na implementação real: carrega onnxruntime, redimensiona imagem/mascara para multiplos de 8, roda o tensor, restaura tamanho.
             async with ai_semaphore:
-                image = Image.open(input_path).convert("RGBA")
-                if mask_path and os.path.exists(mask_path):
-                    mask = Image.open(mask_path).convert("L")
-                    # simple fallback: blur the image where the mask is
-                    blurred = image.filter(ImageFilter.GaussianBlur(15))
-                    image.paste(blurred, (0, 0), mask)
+                with open(input_path, "rb") as f:
+                    image_bytes = f.read()
                 
-                output_buffer = io.BytesIO()
-                image.save(output_buffer, format="PNG")
-                output_image_bytes = output_buffer.getvalue()
+                mask_bytes = b""
+                if mask_path and os.path.exists(mask_path):
+                    with open(mask_path, "rb") as f:
+                        mask_bytes = f.read()
+                
+                from ai_inference import run_lama_inpainting
+                output_image_bytes = await asyncio.to_thread(
+                    run_lama_inpainting,
+                    image_bytes,
+                    mask_bytes
+                )
             
             output_filename = f"{job_id}_inpaint_out.png"
             output_path = os.path.join("storage", output_filename)
@@ -1052,17 +1055,15 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
             result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
 
         elif job_type == 'upscale':
-            # Simulação do RealESRGAN (realesr-general-x4v3 ONNX)
             async with ai_semaphore:
-                # await asyncio.to_thread(run_realesrgan_upscale, input_path)
-                image = Image.open(input_path)
-                # Simulação upscale simples (Bicubic) em vez do AI
-                new_size = (image.width * 4, image.height * 4)
-                upscaled = image.resize(new_size, Image.Resampling.BICUBIC)
+                with open(input_path, "rb") as f:
+                    image_bytes = f.read()
                 
-                output_buffer = io.BytesIO()
-                upscaled.save(output_buffer, format="PNG")
-                output_image_bytes = output_buffer.getvalue()
+                from ai_inference import run_realesrgan_upscale
+                output_image_bytes = await asyncio.to_thread(
+                    run_realesrgan_upscale,
+                    image_bytes
+                )
 
             output_filename = f"{job_id}_upscale_out.png"
             output_path = os.path.join("storage", output_filename)

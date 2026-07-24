@@ -9,9 +9,19 @@ import { globalCommandManager } from "@/lib/studio/commands/GlobalCommandManager
 import { EventBus, StudioEvent } from "@/lib/studio/events/EventBus"
 import { useStudioStore } from "@/store/useStudioStore"
 
+import { Button } from "@/components/ui/button"
+
 function ShapeSidebar() {
+  const engine = useStudioStore(state => state.engine);
+
   const handleAddShape = (type: string) => {
     globalCommandManager.executeCommand(new AddShapeCommand(type as any))
+  }
+
+  const handleBoolean = (op: 'union' | 'difference' | 'intersection') => {
+    if (engine) {
+      engine.applyBooleanOperation(op);
+    }
   }
 
   return (
@@ -21,30 +31,48 @@ function ShapeSidebar() {
         Formas Vetoriais
       </h3>
       
-      <div className="grid grid-cols-2 gap-2 mt-2">
+      <div className="grid grid-cols-2 gap-2 mt-1">
         <button 
           onClick={() => handleAddShape('rect')}
-          className="flex flex-col items-center justify-center p-4 border rounded-lg hover:bg-accent transition bg-card"
+          className="flex flex-col items-center justify-center p-3 border rounded-lg hover:bg-accent transition bg-card"
         >
-          <Square className="h-6 w-6 mb-2 text-muted-foreground" />
+          <Square className="h-5 w-5 mb-1.5 text-muted-foreground" />
           <span className="text-xs font-medium">Retângulo</span>
         </button>
         
         <button 
           onClick={() => handleAddShape('ellipse')}
-          className="flex flex-col items-center justify-center p-4 border rounded-lg hover:bg-accent transition bg-card"
+          className="flex flex-col items-center justify-center p-3 border rounded-lg hover:bg-accent transition bg-card"
         >
-          <Circle className="h-6 w-6 mb-2 text-muted-foreground" />
+          <Circle className="h-5 w-5 mb-1.5 text-muted-foreground" />
           <span className="text-xs font-medium">Elipse</span>
         </button>
         
         <button 
           onClick={() => handleAddShape('line')}
-          className="flex flex-col items-center justify-center p-4 border rounded-lg hover:bg-accent transition bg-card"
+          className="flex flex-col items-center justify-center p-3 border rounded-lg hover:bg-accent transition bg-card"
         >
-          <Minus className="h-6 w-6 mb-2 text-muted-foreground" />
+          <Minus className="h-5 w-5 mb-1.5 text-muted-foreground" />
           <span className="text-xs font-medium">Linha</span>
         </button>
+      </div>
+
+      <div className="border-t pt-3 flex flex-col gap-2">
+        <span className="text-[10px] uppercase font-bold text-muted-foreground">Operações Booleanas</span>
+        <div className="flex flex-col gap-1">
+          <Button variant="outline" size="sm" className="justify-start text-xs h-8" onClick={() => handleBoolean('union')}>
+            🧬 União (Combinar)
+          </Button>
+          <Button variant="outline" size="sm" className="justify-start text-xs h-8" onClick={() => handleBoolean('difference')}>
+            ✂️ Subtração (Diferença)
+          </Button>
+          <Button variant="outline" size="sm" className="justify-start text-xs h-8" onClick={() => handleBoolean('intersection')}>
+            🔶 Interseção
+          </Button>
+        </div>
+        <p className="text-[9px] text-muted-foreground">
+          Selecione 2 formas juntas no canvas (use SHIFT + clique) para combiná-las.
+        </p>
       </div>
     </div>
   )

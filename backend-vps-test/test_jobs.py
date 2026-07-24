@@ -22,6 +22,8 @@ sys.modules['bcrypt'] = MagicMock()
 sys.modules['jwt'] = MagicMock()
 sys.modules['psutil'] = MagicMock()
 sys.modules['email_validator'] = MagicMock()
+sys.modules['onnxruntime'] = MagicMock()
+sys.modules['cv2'] = MagicMock()
 
 from main import process_job_task, get_db_connection
 

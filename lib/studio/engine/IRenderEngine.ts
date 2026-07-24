@@ -161,7 +161,21 @@ export interface IRenderEngine {
   setBlendMode(id: string, mode: string): void;
 
   // Exportação
-  exportImage(options?: { format?: "png" | "jpeg"; quality?: number; multiplier?: number }): string;
+  exportImage(options?: { format?: "png" | "jpeg" | "webp"; quality?: number; multiplier?: number }): string;
+
+  // Camadas de Ajuste
+  addAdjustmentLayer(type: 'brightness' | 'contrast' | 'saturation' | 'hue', value: number): string;
+  updateAdjustmentLayer(id: string, value: number): void;
+
+  // Ferramentas Vetoriais e Caneta Bezier
+  startBezierPen(): void;
+  stopBezierPen(): void;
+  applyBooleanOperation(type: 'union' | 'difference' | 'intersection'): void;
+
+  // Inpainting / Generative Fill
+  startInpaintBrush(): void;
+  stopInpaintBrush(): void;
+  getInpaintMaskAndImage(): Promise<{ imageFile: File, maskFile: File } | null>;
 
   // Persistência de Estado (Document Model)
   exportDocument(): StudioDocument;
