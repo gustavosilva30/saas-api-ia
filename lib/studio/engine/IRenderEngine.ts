@@ -74,6 +74,11 @@ export interface IRenderEngine {
   removeObject(id: string): void;
 
   /**
+   * Duplica um objeto pelo ID, retornando o ID do novo objeto.
+   */
+  duplicateObject(id: string): string;
+
+  /**
    * Adiciona um texto ao centro do canvas.
    * Retorna o ID gerado do objeto inserido.
    */

@@ -273,6 +273,27 @@ export class FabricAdapter implements IRenderEngine {
     }
   }
 
+  duplicateObject(id: string): string {
+    if (!this.canvas) return "";
+    const objects = this.canvas.getObjects() as any[];
+    const target = objects.find(o => o.id === id);
+    if (!target) return "";
+
+    const newId = uuidv4();
+    target.clone((cloned: any) => {
+      cloned.set({
+        id: newId,
+        left: cloned.left + 20,
+        top: cloned.top + 20,
+      });
+      this.canvas!.add(cloned);
+      this.canvas!.setActiveObject(cloned);
+      this.canvas!.requestRenderAll();
+      EventBus.emit(StudioEvent.OBJECT_ADDED, cloned);
+    });
+    return newId;
+  }
+
   addText(text: string, options?: {
     fontFamily?: string;
     fontSize?: number;
