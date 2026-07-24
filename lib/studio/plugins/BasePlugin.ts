@@ -28,6 +28,11 @@ export interface StudioPlugin {
   ContextComponent?: React.FC;
   
   /**
+   * Indica em qual aba do Painel de Propriedades o ContextComponent deve aparecer
+   */
+  propertyTab?: 'properties' | 'appearance' | 'motion' | 'ia' | 'metadata';
+  
+  /**
    * Hook opcional executado quando o plugin for ativado pelo usuário
    */
   onActivate?: () => void;

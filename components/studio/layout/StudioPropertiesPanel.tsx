@@ -29,21 +29,44 @@ export function StudioPropertiesPanel() {
           
           <ScrollArea className="flex-1 p-4">
             <TabsContent value="properties" className="m-0 space-y-4 outline-none">
-              {/* Fallback temporário: renderiza tudo aqui caso o plugin não especifique aba */}
-              {contextualPlugins.map(p => (
+              {contextualPlugins.filter(p => !p.propertyTab || p.propertyTab === 'properties').map(p => (
                 <div key={p.id}>
                   {p.ContextComponent && <p.ContextComponent />}
                 </div>
               ))}
             </TabsContent>
+            
             <TabsContent value="appearance" className="m-0 space-y-4 outline-none">
-              <div className="text-sm text-muted-foreground text-center py-4">Estilos e Efeitos</div>
+              {contextualPlugins.filter(p => p.propertyTab === 'appearance').map(p => (
+                <div key={p.id}>
+                  {p.ContextComponent && <p.ContextComponent />}
+                </div>
+              ))}
+              {contextualPlugins.filter(p => p.propertyTab === 'appearance').length === 0 && (
+                <div className="text-sm text-muted-foreground text-center py-4">Sem estilos para o objeto selecionado.</div>
+              )}
             </TabsContent>
+            
             <TabsContent value="motion" className="m-0 space-y-4 outline-none">
-              <div className="text-sm text-muted-foreground text-center py-4">Timeline e Animações</div>
+              {contextualPlugins.filter(p => p.propertyTab === 'motion').map(p => (
+                <div key={p.id}>
+                  {p.ContextComponent && <p.ContextComponent />}
+                </div>
+              ))}
+              {contextualPlugins.filter(p => p.propertyTab === 'motion').length === 0 && (
+                <div className="text-sm text-muted-foreground text-center py-4">Sem animações para o objeto selecionado.</div>
+              )}
             </TabsContent>
+            
             <TabsContent value="ia" className="m-0 space-y-4 outline-none">
-              <div className="text-sm text-muted-foreground text-center py-4">Ações Inteligentes</div>
+              {contextualPlugins.filter(p => p.propertyTab === 'ia').map(p => (
+                <div key={p.id}>
+                  {p.ContextComponent && <p.ContextComponent />}
+                </div>
+              ))}
+              {contextualPlugins.filter(p => p.propertyTab === 'ia').length === 0 && (
+                <div className="text-sm text-muted-foreground text-center py-4">Sem ações inteligentes disponíveis.</div>
+              )}
             </TabsContent>
             <TabsContent value="metadata" className="m-0 outline-none">
               <ObjectInspector />

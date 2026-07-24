@@ -307,10 +307,57 @@ export class FabricAdapter implements IRenderEngine {
     return id;
   }
 
-  addShape(type: 'rect' | 'circle' | 'polygon' | 'line' | 'arrow', options?: any): string {
+  addShape(type: 'rect' | 'circle' | 'polygon' | 'line' | 'arrow' | 'ellipse', options?: any): string {
     if (!this.canvas) return "";
     const id = uuidv4();
-    // TODO: Instanciar a forma no Fabric.js correspondente na Etapa 2
+    const center = this.canvas.getCenter();
+    
+    let shape: fabric.Object | null = null;
+    
+    const commonOpts = {
+      id,
+      left: center.left,
+      top: center.top,
+      originX: 'center',
+      originY: 'center',
+      fill: options?.fill || '#3b82f6',
+      stroke: options?.stroke || null,
+      strokeWidth: options?.strokeWidth || 0,
+      cornerColor: '#3b82f6',
+      cornerStyle: 'circle',
+      borderColor: '#3b82f6',
+      transparentCorners: false,
+    } as any;
+
+    if (type === 'rect') {
+      shape = new fabric.Rect({
+        ...commonOpts,
+        width: options?.width || 200,
+        height: options?.height || 200,
+        rx: options?.rx || 0,
+        ry: options?.ry || 0,
+      });
+    } else if (type === 'circle' || type === 'ellipse') {
+      shape = new fabric.Ellipse({
+        ...commonOpts,
+        rx: options?.width ? options.width/2 : 100,
+        ry: options?.height ? options.height/2 : 100,
+      });
+    } else if (type === 'line') {
+      shape = new fabric.Line([0, 0, 200, 0], {
+        ...commonOpts,
+        stroke: options?.stroke || '#ffffff',
+        strokeWidth: options?.strokeWidth || 4,
+        fill: null
+      });
+    }
+
+    if (shape) {
+      this.canvas.add(shape);
+      this.canvas.setActiveObject(shape);
+      this.canvas.requestRenderAll();
+    }
+    
     return id;
   }
 

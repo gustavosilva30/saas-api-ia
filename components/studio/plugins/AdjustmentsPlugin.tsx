@@ -135,4 +135,5 @@ export const AdjustmentsPlugin: StudioPlugin = {
   name: "Ajustes",
   icon: Sliders,
   ContextComponent: AdjustmentsContextPanel,
+  propertyTab: 'appearance'
 }

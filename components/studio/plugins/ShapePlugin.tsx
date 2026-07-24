@@ -3,9 +3,15 @@ import React, { useState } from "react"
 import { Hexagon, Square, Circle, Minus } from "lucide-react"
 import { StudioPlugin } from "@/lib/studio/plugins/BasePlugin"
 
+import { AddShapeCommand } from "@/lib/studio/commands/AddShapeCommand"
+import { globalCommandManager } from "@/lib/studio/commands/GlobalCommandManager"
+
+import { EventBus, StudioEvent } from "@/lib/studio/events/EventBus"
+import { useStudioStore } from "@/store/useStudioStore"
+
 function ShapeSidebar() {
   const handleAddShape = (type: string) => {
-    alert("Adicionando forma: " + type)
+    globalCommandManager.executeCommand(new AddShapeCommand(type as any))
   }
 
   return (
@@ -44,9 +50,39 @@ function ShapeSidebar() {
   )
 }
 
+function ShapeContextPanel() {
+  const engine = useStudioStore(state => state.engine);
+  const selectedObjectType = useStudioStore(state => state.selectedObjectType);
+  
+  if (selectedObjectType !== 'rect' && selectedObjectType !== 'ellipse' && selectedObjectType !== 'polygon') {
+    return null;
+  }
+  
+  const handleUpdate = (props: any) => {
+    if (engine) {
+      const active = engine.getLayers().find(l => l.zIndex !== undefined); // Hack para pegar selecionado? Não, FabricAdapter tem getObjectProperties
+      // Mas melhor usar eventbus
+    }
+  }
+  
+  // Vamos simplificar para a UI:
+  return (
+    <div className="flex flex-col p-4 gap-4 animate-in fade-in">
+      <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground border-b pb-2">
+        Propriedades da Forma
+      </h3>
+      <div className="text-xs text-muted-foreground">
+        Preenchimento, Borda e Arredondamento (Raio) estarão disponíveis em breve via barra inteligente.
+      </div>
+    </div>
+  )
+}
+
 export const ShapePlugin: StudioPlugin = {
   id: "shapes",
   name: "Formas",
   icon: Hexagon,
   SidebarComponent: ShapeSidebar,
+  ContextComponent: ShapeContextPanel,
+  propertyTab: 'properties'
 }
