@@ -95,10 +95,28 @@ export function StudioCanvasArea() {
     }
   }, [setEngine])
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const url = e.dataTransfer.getData("text/plain");
+    if (url && adapterRef.current) {
+      // Inicia um AddImageCommand
+      const { AddImageCommand } = require("@/lib/studio/commands/AddImageCommand")
+      const { globalCommandManager } = require("@/lib/studio/commands/GlobalCommandManager")
+      globalCommandManager.executeCommand(new AddImageCommand(url));
+    }
+  }
+
   return (
     <div 
       ref={containerRef} 
       className="flex-1 relative bg-neutral-900 overflow-hidden flex items-center justify-center cursor-default"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       {/* Overlay de IA - Bloqueia interação enquanto processa */}
       {isProcessingAI && (

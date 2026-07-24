@@ -14,6 +14,7 @@ import { MotionPropertiesPlugin } from "@/components/studio/plugins/MotionProper
 import { DrawingPlugin } from "@/components/studio/plugins/DrawingPlugin"
 import { ComponentsLibraryPlugin } from "@/components/studio/plugins/ComponentsLibraryPlugin"
 import { StylesLibraryPlugin } from "@/components/studio/plugins/StylesLibraryPlugin"
+import { TemplatesPlugin } from "@/components/studio/plugins/TemplatesPlugin"
 
 import { AIProviderManager } from "@/lib/studio/ai/AIProviderManager"
 import { NextApiBackgroundRemovalProvider } from "@/lib/studio/ai/providers/BackgroundRemovalProvider"
@@ -23,6 +24,7 @@ export function registerAllPlugins() {
   // Evita registrar múltiplos se a função for chamada novamente no React Strict Mode
   if (PluginManager.getAllPlugins().length === 0) {
     PluginManager.register(AssetsManagerPlugin)
+    PluginManager.register(TemplatesPlugin)
     PluginManager.register(ComponentsLibraryPlugin)
     PluginManager.register(StylesLibraryPlugin)
     PluginManager.register(BackgroundPlugin)
