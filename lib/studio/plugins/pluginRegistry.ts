@@ -13,6 +13,7 @@ import { ExportPlugin } from "@/components/studio/plugins/ExportPlugin"
 import { MotionPropertiesPlugin } from "@/components/studio/plugins/MotionPropertiesPlugin"
 import { DrawingPlugin } from "@/components/studio/plugins/DrawingPlugin"
 import { ComponentsLibraryPlugin } from "@/components/studio/plugins/ComponentsLibraryPlugin"
+import { StylesLibraryPlugin } from "@/components/studio/plugins/StylesLibraryPlugin"
 
 import { AIProviderManager } from "@/lib/studio/ai/AIProviderManager"
 import { NextApiBackgroundRemovalProvider } from "@/lib/studio/ai/providers/BackgroundRemovalProvider"
@@ -23,6 +24,7 @@ export function registerAllPlugins() {
   if (PluginManager.getAllPlugins().length === 0) {
     PluginManager.register(AssetsManagerPlugin)
     PluginManager.register(ComponentsLibraryPlugin)
+    PluginManager.register(StylesLibraryPlugin)
     PluginManager.register(BackgroundPlugin)
     PluginManager.register(ShadowPlugin)
     PluginManager.register(AdjustmentsPlugin)
