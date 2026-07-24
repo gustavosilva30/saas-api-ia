@@ -904,6 +904,8 @@ export class FabricAdapter implements IRenderEngine {
         reject(err);
       }
     });
+  }
+
   // --- Vector & Bezier Pen Tools ---
   private _bezierPoints: any[] = [];
   private _bezierLines: any[] = [];
