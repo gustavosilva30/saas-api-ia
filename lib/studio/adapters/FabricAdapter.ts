@@ -94,6 +94,13 @@ export class FabricAdapter implements IRenderEngine {
     this.canvas.on('selection:created', (e) => EventBus.emit(StudioEvent.OBJECT_SELECTED, e.selected));
     this.canvas.on('selection:updated', (e) => EventBus.emit(StudioEvent.OBJECT_SELECTED, e.selected));
     this.canvas.on('selection:cleared', () => EventBus.emit(StudioEvent.SELECTION_CLEARED));
+    
+    // Lasso Tool / Free drawing interception
+    this.canvas.on('path:created', (e: any) => {
+      if ((this as any)._selectionMode === 'lasso') {
+        EventBus.emit('LASSO_PATH_CREATED', e.path);
+      }
+    });
   }
 
   private setupSnapping() {
@@ -593,20 +600,28 @@ export class FabricAdapter implements IRenderEngine {
 
   startSelection(type: SelectionType, options?: any): void {
     if (!this.canvas) return;
-    // Em uma implementação real do Laço/Crop, nós setamos o isDrawingMode = true 
-    // ou lidamos com on('mouse:down') customizado desenhando polígonos.
-    // Para simplificar a v1:
-    this.canvas.defaultCursor = 'crosshair';
-    this.canvas.selection = false;
-    
-    // Guardaremos o estado em variáveis privadas da classe
     (this as any)._selectionMode = type;
+
+    if (type === 'lasso') {
+      const { SelectionEngine } = require('../engine/SelectionEngine');
+      SelectionEngine.startLassoDrawing(this.canvas, options?.brushSize || 2);
+    } else {
+      this.canvas.defaultCursor = 'crosshair';
+      this.canvas.selection = false;
+    }
   }
 
   stopSelection(): void {
     if (!this.canvas) return;
-    this.canvas.defaultCursor = 'default';
-    this.canvas.selection = true;
+    
+    if ((this as any)._selectionMode === 'lasso') {
+      const { SelectionEngine } = require('../engine/SelectionEngine');
+      SelectionEngine.stopLassoDrawing(this.canvas);
+    } else {
+      this.canvas.defaultCursor = 'default';
+      this.canvas.selection = true;
+    }
+    
     (this as any)._selectionMode = null;
   }
 
