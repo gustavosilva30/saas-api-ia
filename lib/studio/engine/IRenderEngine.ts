@@ -53,10 +53,14 @@ export interface IRenderEngine {
   setBackgroundColor(color: string): void;
 
   /**
-   * Adiciona uma imagem ao centro do canvas a partir de uma URL.
-   * Retorna o ID gerado do objeto inserido.
+   * Adiciona uma imagem passando a URL (retorna o ID).
    */
-  addImageFromUrl(url: string): Promise<string>;
+  addImageFromUrl(url: string, idPrefix?: string): Promise<string>;
+
+  /**
+   * Atualiza a URL da imagem de um objeto existente (útil para IA).
+   */
+  updateObjectImageUrl(id: string, newUrl: string): Promise<void>;
 
   /**
    * Retorna a URL da imagem base do objeto selecionado.

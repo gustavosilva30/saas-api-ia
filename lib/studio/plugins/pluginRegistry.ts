@@ -15,6 +15,7 @@ import { DrawingPlugin } from "@/components/studio/plugins/DrawingPlugin"
 import { ComponentsLibraryPlugin } from "@/components/studio/plugins/ComponentsLibraryPlugin"
 import { StylesLibraryPlugin } from "@/components/studio/plugins/StylesLibraryPlugin"
 import { TemplatesPlugin } from "@/components/studio/plugins/TemplatesPlugin"
+import { AIAssistantPlugin } from "@/components/studio/plugins/AIAssistantPlugin"
 
 import { AIProviderManager } from "@/lib/studio/ai/AIProviderManager"
 import { NextApiBackgroundRemovalProvider } from "@/lib/studio/ai/providers/BackgroundRemovalProvider"
@@ -27,6 +28,7 @@ export function registerAllPlugins() {
     PluginManager.register(TemplatesPlugin)
     PluginManager.register(ComponentsLibraryPlugin)
     PluginManager.register(StylesLibraryPlugin)
+    PluginManager.register(AIAssistantPlugin)
     PluginManager.register(BackgroundPlugin)
     PluginManager.register(ShadowPlugin)
     PluginManager.register(AdjustmentsPlugin)
