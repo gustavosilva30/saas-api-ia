@@ -23,24 +23,32 @@ export function QuickActionsMenu() {
     selectedIds.forEach(id => {
       globalCommandManager.executeCommand(new DuplicateObjectCommand(id))
     })
+    const { toast } = require("sonner");
+    toast.success("Objeto duplicado");
   }
 
   const handleDelete = () => {
     selectedIds.forEach(id => {
       globalCommandManager.executeCommand(new DeleteObjectCommand(id))
     })
+    const { toast } = require("sonner");
+    toast.success("Objeto excluído");
   }
 
   const handleBringForward = () => {
     selectedIds.forEach(id => {
       globalCommandManager.executeCommand(new MoveLayerCommand(id, 'up'))
     })
+    const { toast } = require("sonner");
+    toast.info("Movido para cima");
   }
 
   const handleSendBackward = () => {
     selectedIds.forEach(id => {
       globalCommandManager.executeCommand(new MoveLayerCommand(id, 'down'))
     })
+    const { toast } = require("sonner");
+    toast.info("Movido para baixo");
   }
 
   return (

@@ -39,15 +39,28 @@ function HistorySidebar() {
       {history.length === 0 ? (
         <p className="text-xs text-muted-foreground text-center mt-10">Nenhuma ação recente.</p>
       ) : (
-        <div className="flex flex-col gap-2">
-          {history.map((item, index) => (
-            <div key={item.id} className="flex items-center justify-between p-2 rounded-lg border bg-card hover:bg-accent cursor-pointer transition" onClick={() => handleGoTo(index)}>
-              <span className="text-xs truncate max-w-[150px]">
-                {item.label}
-              </span>
-              <RotateCcw className="h-3 w-3 text-muted-foreground" />
-            </div>
-          ))}
+        <div className="flex flex-col gap-2 relative">
+          {/* Linha vertical conectando os itens */}
+          <div className="absolute left-[15px] top-4 bottom-4 w-px bg-border z-0" />
+          
+          {history.map((item, index) => {
+            const isLatest = index === history.length - 1;
+            return (
+              <div 
+                key={item.id} 
+                className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition relative z-10 
+                  ${isLatest ? 'bg-primary/10 border border-primary/20' : 'bg-card border border-transparent hover:border-border'}
+                `} 
+                onClick={() => handleGoTo(index)}
+              >
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isLatest ? 'bg-primary ring-2 ring-primary/20' : 'bg-muted-foreground'}`} />
+                <span className={`text-xs truncate max-w-[150px] ${isLatest ? 'font-medium text-primary' : 'text-foreground'}`}>
+                  {item.label}
+                </span>
+                <RotateCcw className="h-3 w-3 text-muted-foreground ml-auto flex-shrink-0" />
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

@@ -61,9 +61,13 @@ function ExportSidebar() {
       link.click()
       document.body.removeChild(link)
       
+      const { toast } = require("sonner");
+      toast.success("Exportação concluída com sucesso!")
+      
     } catch (e) {
       console.error(e)
-      alert("Erro ao exportar.")
+      const { toast } = require("sonner");
+      toast.error("Erro ao exportar o documento.")
     } finally {
       setIsExporting(false)
     }

@@ -54,18 +54,22 @@ function AIAssistantContextPanel() {
       
       const response = await AIProviderManager.removeBackground(file)
       
+      const { toast } = require("sonner");
+
       if (response.success && response.data) {
         // Sucesso: a IA retornou uma nova URL da imagem sem fundo
         // Substituir a imagem atual pela nova
         engine.updateObjectImageUrl(selectedObjectId, response.data)
         engine.requestRender()
         EventBus.emit(StudioEvent.HISTORY_CHANGED)
+        toast.success("Fundo removido com sucesso!")
       } else {
-        alert(response.error || "Erro ao remover o fundo.")
+        toast.error(response.error || "Erro ao remover o fundo.")
       }
     } catch (error) {
       console.error(error)
-      alert("Ocorreu um erro ao processar a IA.")
+      const { toast } = require("sonner");
+      toast.error("Ocorreu um erro ao processar a IA.")
     } finally {
       setIsProcessingAI(false)
     }
