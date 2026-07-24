@@ -46,13 +46,13 @@ export function StudioSidebar() {
     <TooltipProvider delayDuration={300}>
       <div className="flex h-full">
         {/* Menu Ícones (Nova Sidebar) */}
-        <div className="w-[72px] border-r bg-background flex flex-col items-center py-4 gap-6 shrink-0 z-10 overflow-y-auto hide-scrollbar">
+        <div className="w-[80px] border-r bg-background flex flex-col items-center py-4 gap-6 shrink-0 z-10 overflow-y-auto no-scrollbar">
           
           {CATEGORY_ORDER.map(cat => {
             if (!groupedPlugins[cat] || groupedPlugins[cat].length === 0) return null;
             return (
               <div key={cat} className="flex flex-col items-center gap-2 w-full">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{cat}</span>
+                <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-1 w-full text-center truncate px-1" title={cat}>{cat}</span>
                 {groupedPlugins[cat].map((tool) => (
                   <Tooltip key={tool.id}>
                     <TooltipTrigger asChild>
@@ -78,7 +78,7 @@ export function StudioSidebar() {
 
         {/* Painel do Plugin Ativo */}
         {activePlugin && (
-          <div className="h-full border-r bg-background w-72 animate-in slide-in-from-left-2 duration-200">
+          <div className="h-full border-r bg-background w-auto min-w-[280px] animate-in slide-in-from-left-2 duration-200">
             {(() => {
               const ActiveComponent = plugins.find(p => p.id === activePlugin)?.SidebarComponent;
               return ActiveComponent ? <ActiveComponent /> : null;
