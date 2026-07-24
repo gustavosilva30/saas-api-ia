@@ -179,6 +179,43 @@ export class FabricAdapter implements IRenderEngine {
     }
   }
 
+  setBackgroundImage(url: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.canvas) return reject();
+      
+      fabric.Image.fromURL(url, (img) => {
+        if (!img || !this.canvas) return reject();
+        
+        // Scale to cover or fit
+        const canvasWidth = this.canvas.width || 800;
+        const canvasHeight = this.canvas.height || 600;
+        
+        const scaleX = canvasWidth / (img.width || 1);
+        const scaleY = canvasHeight / (img.height || 1);
+        const scale = Math.max(scaleX, scaleY);
+        
+        img.set({
+          scaleX: scale,
+          scaleY: scale,
+          originX: 'center',
+          originY: 'center',
+          left: canvasWidth / 2,
+          top: canvasHeight / 2
+        });
+
+        this.canvas.setBackgroundImage(img, this.canvas.renderAll.bind(this.canvas));
+        resolve();
+      }, { crossOrigin: 'anonymous' });
+    });
+  }
+
+  clearBackgroundImage(): void {
+    if (this.canvas) {
+      this.canvas.backgroundImage = null;
+      this.canvas.requestRenderAll();
+    }
+  }
+
   addImageFromUrl(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
       if (!this.canvas || this.isDestroyed) return reject("Canvas not initialized");

@@ -53,6 +53,16 @@ export interface IRenderEngine {
   setBackgroundColor(color: string): void;
 
   /**
+   * Define uma imagem de fundo, ajustando para cobrir/preencher o canvas.
+   */
+  setBackgroundImage(url: string): Promise<void>;
+
+  /**
+   * Remove a imagem de fundo.
+   */
+  clearBackgroundImage(): void;
+
+  /**
    * Adiciona uma imagem passando a URL (retorna o ID).
    */
   addImageFromUrl(url: string, idPrefix?: string): Promise<string>;
