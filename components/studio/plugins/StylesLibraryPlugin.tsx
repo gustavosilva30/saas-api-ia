@@ -99,15 +99,29 @@ function StylesSidebar() {
                         <Zap className="absolute top-2 right-2 h-3 w-3 text-amber-500" />
                       )}
                       
-                      <div 
-                        className="w-12 h-12 rounded-full mb-3 transform group-hover:scale-110 transition-transform duration-300"
-                        style={{
-                          backgroundColor: style.properties.fill !== 'transparent' ? style.properties.fill : undefined,
-                          background: style.properties.fill && style.properties.fill.includes('gradient') ? style.properties.fill : undefined,
-                          border: style.properties.strokeWidth ? `${style.properties.strokeWidth}px solid ${style.properties.stroke}` : 'none',
-                          boxShadow: style.properties.shadow ? `${style.properties.shadow.offsetX}px ${style.properties.shadow.offsetY}px ${style.properties.shadow.blur}px ${style.properties.shadow.color}` : 'none'
-                        }}
-                      />
+                    <div 
+                      className="w-12 h-12 rounded-full mb-3 transform group-hover:scale-110 transition-transform duration-300"
+                      style={(() => {
+                        const p = style.properties;
+                        let bg: string | undefined = undefined;
+                        if (p.fill && typeof p.fill === 'string' && !p.fill.includes('gradient') && p.fill !== 'transparent') {
+                          bg = p.fill;
+                        } else if (p.fill && typeof p.fill === 'object' && p.fill.colorStops) {
+                          const stops = p.fill.colorStops.map((s: any) => `${s.color} ${s.offset * 100}%`).join(', ');
+                          bg = p.fill.type === 'radial' ? `radial-gradient(circle, ${stops})` : `linear-gradient(135deg, ${stops})`;
+                        } else if (p.filters && p.filters.length > 0) {
+                          bg = 'linear-gradient(135deg, #6366f1, #8b5cf6)';
+                        } else if (!p.fill || p.fill === 'transparent') {
+                          bg = 'transparent';
+                        }
+                        return {
+                          background: bg,
+                          border: p.strokeWidth ? `${Math.min(p.strokeWidth, 3)}px solid ${p.stroke || '#ccc'}` : 'none',
+                          boxShadow: p.shadow ? `0px ${p.shadow.offsetY}px ${p.shadow.blur}px ${p.shadow.color}` : 'none',
+                          borderRadius: p.rx ? `${p.rx}px` : '50%',
+                        };
+                      })()}
+                    />
                       <span className="text-[10px] font-medium text-center leading-tight">{style.name}</span>
                     </button>
                   ))}

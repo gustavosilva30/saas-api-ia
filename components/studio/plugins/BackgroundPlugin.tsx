@@ -27,24 +27,66 @@ const MOCK_GALLERY = [
   { id: 6, url: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&q=80&w=300&h=300", name: "Ambiente Quente" },
 ]
 
+const GRADIENTS = [
+  { name: "Sunset", config: { type: 'linear', colorStops: [{offset: 0, color: '#f97316'}, {offset: 1, color: '#ec4899'}] } },
+  { name: "Ocean", config: { type: 'linear', colorStops: [{offset: 0, color: '#3b82f6'}, {offset: 1, color: '#2dd4bf'}] } },
+  { name: "Midnight", config: { type: 'linear', colorStops: [{offset: 0, color: '#0f172a'}, {offset: 1, color: '#3b82f6'}] } },
+  { name: "Forest", config: { type: 'radial', colorStops: [{offset: 0, color: '#22c55e'}, {offset: 1, color: '#064e3b'}] } },
+  { name: "Premium Gold", config: { type: 'linear', colorStops: [{offset: 0, color: '#fef08a'}, {offset: 1, color: '#eab308'}] } },
+  { name: "Cyberpunk", config: { type: 'linear', colorStops: [{offset: 0, color: '#a855f7'}, {offset: 1, color: '#f43f5e'}] } }
+]
+
 function BackgroundSidebar() {
   const engine = useStudioStore((state) => state.engine)
   const [activeColor, setActiveColor] = useState<string>("#ffffff")
+  const [opacity, setOpacity] = useState<number>(100)
   const [aiPrompt, setAiPrompt] = useState<string>("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [isAutoGenerating, setIsAutoGenerating] = useState(false)
 
+  // Função utilitária para converter HEX + Opacidade para RGBA
+  const hexToRgba = (hex: string, alpha: number) => {
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) {
+      r = parseInt(hex[1] + hex[1], 16);
+      g = parseInt(hex[2] + hex[2], 16);
+      b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) {
+      r = parseInt(hex.substring(1, 3), 16);
+      g = parseInt(hex.substring(3, 5), 16);
+      b = parseInt(hex.substring(5, 7), 16);
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
   const handleSetColor = (color: string) => {
     setActiveColor(color)
     if (!engine) return
-    const prevBg = engine.canvas?.backgroundColor as string || null;
-    const command = new SetBackgroundCommand(color, null, prevBg, null);
+    const prevBg = engine.canvas?.backgroundColor || null;
+    const rgbaColor = hexToRgba(color, opacity / 100);
+    const command = new SetBackgroundCommand(rgbaColor, null, prevBg, null);
+    globalCommandManager.executeCommand(command);
+  }
+
+  const handleOpacityChange = (val: number[]) => {
+    setOpacity(val[0]);
+    if (!engine) return
+    const prevBg = engine.canvas?.backgroundColor || null;
+    const rgbaColor = hexToRgba(activeColor, val[0] / 100);
+    const command = new SetBackgroundCommand(rgbaColor, null, prevBg, null);
+    globalCommandManager.executeCommand(command);
+  }
+
+  const handleSetGradient = (config: any) => {
+    if (!engine) return
+    const prevBg = engine.canvas?.backgroundColor || null;
+    const command = new SetBackgroundCommand(config, null, prevBg, null);
     globalCommandManager.executeCommand(command);
   }
 
   const handleSetImage = (url: string) => {
     if (!engine) return
-    const prevBgColor = engine.canvas?.backgroundColor as string || null;
+    const prevBgColor = engine.canvas?.backgroundColor || null;
     const command = new SetBackgroundCommand(null, url, prevBgColor, null);
     globalCommandManager.executeCommand(command);
     const { toast } = require("sonner");
@@ -62,13 +104,17 @@ function BackgroundSidebar() {
     toast.info("Gerando fundo com IA... Isso pode levar alguns segundos.");
     
     try {
-      const result = await BackgroundAIProvider.generateBackground(aiPrompt);
-      if (result.success && result.url) {
-        handleSetImage(result.url);
+      // Integração com o novo sistema via AIProviderManager
+      const { AIProviderManager } = require("@/lib/studio/ai/AIProviderManager");
+      const result = await AIProviderManager.generateImage(aiPrompt, { width: 1024, height: 1024 });
+      if (result.success && result.data) {
+        handleSetImage(result.data);
         toast.success("Cenário gerado com sucesso!");
+      } else {
+        toast.error(result.error || "Falha ao gerar cenário.");
       }
     } catch (error) {
-      toast.error("Falha ao gerar cenário.");
+      toast.error("Ocorreu um erro ao gerar o cenário.");
     } finally {
       setIsGenerating(false);
     }
@@ -99,8 +145,9 @@ function BackgroundSidebar() {
       </h3>
       
       <Tabs defaultValue="colors" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-4">
+        <TabsList className="grid w-full grid-cols-5 mb-4">
           <TabsTrigger value="colors" className="text-[10px] px-1">Cores</TabsTrigger>
+          <TabsTrigger value="gradients" className="text-[10px] px-1">Grad</TabsTrigger>
           <TabsTrigger value="gallery" className="text-[10px] px-1">Galeria</TabsTrigger>
           <TabsTrigger value="ai" className="text-[10px] px-1">IA</TabsTrigger>
           <TabsTrigger value="adjust" className="text-[10px] px-1">Ajuste</TabsTrigger>
@@ -122,9 +169,38 @@ function BackgroundSidebar() {
           </div>
           <div>
             <label className="text-xs font-semibold mb-2 block">Color Picker</label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mb-3">
               <input type="color" className="w-10 h-10 rounded border" onChange={(e) => handleSetColor(e.target.value)} value={activeColor} />
               <input type="text" className="flex-1 border rounded px-2 h-10 text-sm font-mono" value={activeColor} readOnly />
+            </div>
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-xs font-semibold">Opacidade</label>
+                <span className="text-[10px] text-muted-foreground">{opacity}%</span>
+              </div>
+              <Slider value={[opacity]} onValueChange={handleOpacityChange} max={100} step={1} />
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="gradients" className="flex flex-col gap-4">
+          <div>
+            <label className="text-xs font-semibold mb-2 block">Gradientes Premium</label>
+            <div className="grid grid-cols-2 gap-2">
+              {GRADIENTS.map((grad, idx) => (
+                <div 
+                  key={idx}
+                  onClick={() => handleSetGradient(grad.config)}
+                  className="relative group rounded-md overflow-hidden cursor-pointer border aspect-[2/1] transition hover:ring-2 hover:ring-primary flex items-end p-2"
+                  style={{
+                    background: grad.config.type === 'linear' 
+                      ? `linear-gradient(to right, ${grad.config.colorStops[0].color}, ${grad.config.colorStops[1].color})`
+                      : `radial-gradient(circle, ${grad.config.colorStops[0].color}, ${grad.config.colorStops[1].color})`
+                  }}
+                >
+                  <span className="text-[10px] text-white font-medium drop-shadow-md">{grad.name}</span>
+                </div>
+              ))}
             </div>
           </div>
         </TabsContent>
@@ -183,14 +259,6 @@ function BackgroundSidebar() {
 
         <TabsContent value="adjust" className="flex flex-col gap-4">
           <div className="flex flex-col gap-5 p-2">
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-semibold">Opacidade</label>
-                <span className="text-[10px] text-muted-foreground">100%</span>
-              </div>
-              <Slider defaultValue={[100]} max={100} step={1} />
-            </div>
-            
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label className="text-xs font-semibold">Desfoque (Blur)</label>

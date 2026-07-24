@@ -6,7 +6,7 @@ import "./CurvesFilter"; // Registra o filtro customizado
 
 // Tipos auxiliares de Seleção e Ajustes
 type SelectionType = 'rect' | 'ellipse' | 'lasso' | 'crop';
-type AdjustmentType = 'brightness' | 'contrast' | 'saturation' | 'hue' | 'curves';
+type AdjustmentType = 'brightness' | 'contrast' | 'saturation' | 'hue' | 'curves' | 'blur' | 'noise' | 'pixelate';
 
 export class FabricAdapter implements IRenderEngine {
   private canvas: fabric.Canvas | null = null;
@@ -182,6 +182,32 @@ export class FabricAdapter implements IRenderEngine {
   setBackgroundColor(color: string): void {
     if (this.canvas) {
       this.canvas.backgroundColor = color;
+      this.canvas.requestRenderAll();
+    }
+  }
+
+  setBackgroundGradient(config: { type: 'linear'|'radial', colorStops: {offset: number, color: string}[], coords?: any }): void {
+    if (this.canvas) {
+      // Default coordinates if not provided
+      let coords = config.coords;
+      if (!coords) {
+        if (config.type === 'linear') {
+          coords = { x1: 0, y1: 0, x2: this.canvas.width || 800, y2: this.canvas.height || 800 };
+        } else {
+          const w = this.canvas.width || 800;
+          const h = this.canvas.height || 800;
+          const r = Math.max(w, h) / 2;
+          coords = { x1: w/2, y1: h/2, r1: 0, x2: w/2, y2: h/2, r2: r };
+        }
+      }
+
+      const gradient = new fabric.Gradient({
+        type: config.type,
+        coords: coords,
+        colorStops: config.colorStops
+      });
+
+      this.canvas.backgroundColor = gradient as any;
       this.canvas.requestRenderAll();
     }
   }
@@ -443,7 +469,30 @@ export class FabricAdapter implements IRenderEngine {
     const objects = this.canvas.getObjects() as any[];
     const target = objects.find(o => o.id === id);
     if (target) {
-      target.set(properties);
+      const propsToSet = { ...properties };
+      // Handle Gradients dynamically
+      ['fill', 'stroke'].forEach(key => {
+        if (propsToSet[key] && typeof propsToSet[key] === 'object' && propsToSet[key].colorStops) {
+          const config = propsToSet[key];
+          let coords = config.coords;
+          if (!coords) {
+            const w = target.width * target.scaleX || 100;
+            const h = target.height * target.scaleY || 100;
+            if (config.type === 'linear') {
+              coords = { x1: 0, y1: 0, x2: w, y2: h };
+            } else {
+              const r = Math.max(w, h) / 2;
+              coords = { x1: w/2, y1: h/2, r1: 0, x2: w/2, y2: h/2, r2: r };
+            }
+          }
+          propsToSet[key] = new fabric.Gradient({
+            type: config.type,
+            coords: coords,
+            colorStops: config.colorStops
+          });
+        }
+      });
+      target.set(propsToSet);
       // Não chamamos requestRenderAll aqui para otimização, 
       // o MotionEngine chama em lote após atualizar todos.
     }
@@ -542,7 +591,10 @@ export class FabricAdapter implements IRenderEngine {
       'contrast': 'Contrast',
       'saturation': 'Saturation',
       'hue': 'HueRotation',
-      'curves': 'Curves'
+      'curves': 'Curves',
+      'blur': 'Blur',
+      'noise': 'Noise',
+      'pixelate': 'Pixelate'
     };
 
     const targetType = filterTypes[type];
@@ -567,6 +619,15 @@ export class FabricAdapter implements IRenderEngine {
           break;
         case 'curves':
           newFilter = new (fabric.Image.filters as any).Curves({ lut: params });
+          break;
+        case 'blur':
+          newFilter = new fabric.Image.filters.Blur({ blur: params });
+          break;
+        case 'noise':
+          newFilter = new (fabric.Image.filters as any).Noise({ noise: params });
+          break;
+        case 'pixelate':
+          newFilter = new (fabric.Image.filters as any).Pixelate({ blocksize: params });
           break;
       }
       if (newFilter) {
@@ -595,6 +656,16 @@ export class FabricAdapter implements IRenderEngine {
     if (!obj) return {};
     return (obj as any)._adjustmentsCache || {};
   }
+
+  applyAdjustments(id: string, adjustments: Record<string, any>): void {
+    const supportedTypes = ['brightness', 'contrast', 'saturation', 'hue', 'blur', 'noise', 'pixelate'] as const;
+    supportedTypes.forEach(type => {
+      if (adjustments[type] !== undefined) {
+        this.applyAdjustment(id, type as AdjustmentType, adjustments[type]);
+      }
+    });
+  }
+
 
   // --- Selection Tools ---
 

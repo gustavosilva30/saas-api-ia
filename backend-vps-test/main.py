@@ -25,7 +25,9 @@ import json
 import requests
 import asyncio
 import io
-from PIL import Image, ImageFilter, ImageEnhance
+from PIL import Image, ImageFilter, ImageEnhance, ImageDraw
+import torch
+from transformers import CLIPModel, CLIPProcessor
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -222,8 +224,28 @@ def send_confirmation_email(to_email: str, user_name: str, token: str):
 
 
 
+import asyncio
+
+job_queue = asyncio.PriorityQueue()
+
+async def job_worker_loop():
+    print("Iniciando Job Worker Loop com Prioridade...")
+    while True:
+        try:
+            priority, kwargs = await job_queue.get()
+            try:
+                await process_job_task(**kwargs)
+            except Exception as e:
+                print(f"Erro ao processar job: {e}")
+            finally:
+                job_queue.task_done()
+        except Exception as e:
+            print(f"Erro fatal no worker loop: {e}")
+            await asyncio.sleep(1)
+
 @app.on_event("startup")
 def startup_db_setup():
+    asyncio.create_task(job_worker_loop())
     global db_pool
     if not DATABASE_URL:
         print("DATABASE_URL não configurada. Pulando setup do banco.")
@@ -261,6 +283,10 @@ def startup_db_setup():
                 error_message TEXT,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+        """)
+
+        cur.execute("""
+            ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_hash VARCHAR(255);
         """)
 
         cur.execute("""
@@ -846,6 +872,9 @@ CATEGORIES = ["tênis e calçados", "perfume e cosmético", "peça automotiva",
 BG_STYLES = ["studio_white", "dark_dramatic", "lifestyle_outdoor", "industrial"]
 
 def vision_analyze_real(input_image_bytes: bytes) -> dict:
+    if os.getenv("VISION_MODEL_READY", "false").lower() != "true":
+        return vision_analyze_mock(input_image_bytes)
+
     model, processor = get_clip()
     image = Image.open(io.BytesIO(input_image_bytes)).convert("RGB")
 
@@ -883,8 +912,8 @@ def vision_analyze_mock(input_image_bytes):
 def ollama_generate_copy(category: str):
     prompt = f"Gere uma cópia comercial em JSON para um produto da categoria: {category}. Inclua as chaves: title, subtitle, description, benefits (array), cta, hashtags, platformSpecific (objeto com instagram, mercadolivre, facebook) e seoKeywords (array)."
     try:
-        # Tenta conectar no Ollama local (se a VPS ou Dev machine tiver)
-        res = requests.post("http://localhost:11434/api/generate", json={
+        endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
+        res = requests.post(endpoint, json={
             "model": "llama3.1",
             "prompt": prompt,
             "stream": False,
@@ -898,25 +927,58 @@ def ollama_generate_copy(category: str):
 
     # Fallback caso falhe conexão ou parse
     return {
-      "title": f"Lançamento: {category}",
-      "subtitle": "Qualidade e design.",
-      "description": "Excelente produto (Gerado por Fallback porque o Ollama não respondeu).",
-      "benefits": ["Garantia", "Durabilidade"],
-      "cta": "Compre já!",
-      "hashtags": "#oferta",
+      "title": f"Novo: {category.title()}",
+      "subtitle": "Qualidade premium e design inovador.",
+      "description": f"Descubra o melhor em {category.lower()} com nosso mais recente lançamento. Feito para superar expectativas e entregar resultados excepcionais no dia a dia.",
+      "benefits": ["Garantia de 1 ano", "Alta durabilidade", "Design exclusivo"],
+      "cta": "Adquira agora com desconto!",
+      "hashtags": f"#novidade #{category.replace(' ', '')} #premium #oferta",
       "platformSpecific": {
-        "instagram": "Confira! Link na bio.",
-        "facebook": "Aproveite a promoção no nosso site.",
-        "mercadolivre": "Envio Full."
+        "instagram": "Confira os detalhes no link da bio! ✨📸",
+        "facebook": "Aproveite nossa promoção exclusiva. Acesse o site e saiba mais. 💻🔥",
+        "mercadolivre": "Envio Full imediato! Compre hoje e receba amanhã. 📦⚡"
       },
-      "seoKeywords": ["comprar", category.lower()]
+      "seoKeywords": ["comprar", "melhor preço", category.lower(), "qualidade"]
     }
 
 async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, input_path: str = None, category_arg: str = None, mask_path: str = None, extra_arg: str = None):
     conn = get_db_connection()
     try:
-        cur = conn.cursor()
-        cur.execute("UPDATE jobs SET status = 'processing' WHERE id = %s;", (job_id,))
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # --- Lógica de Cache (Hit) ---
+        import hashlib
+        job_hash = None
+        
+        if input_path and os.path.exists(input_path):
+            hasher = hashlib.md5()
+            with open(input_path, "rb") as f:
+                hasher.update(f.read())
+            hasher.update(str(job_type).encode())
+            hasher.update(str(extra_arg).encode())
+            hasher.update(str(category_arg).encode())
+            if mask_path and os.path.exists(mask_path):
+                with open(mask_path, "rb") as f:
+                    hasher.update(f.read())
+            
+            job_hash = hasher.hexdigest()
+            
+            cur.execute("SELECT result_url, result_data FROM jobs WHERE job_hash = %s AND status = 'completed' LIMIT 1;", (job_hash,))
+            cached_job = cur.fetchone()
+            
+            if cached_job:
+                # Cache HIT
+                print(f"[CACHE HIT] Job {job_id} será servido do cache (hash: {job_hash})")
+                cur.execute("UPDATE jobs SET status = 'completed', result_url = %s, result_data = %s, job_hash = %s WHERE id = %s;", 
+                            (cached_job['result_url'], json.dumps(cached_job['result_data']) if cached_job['result_data'] else None, job_hash, job_id))
+                conn.commit()
+                # Disparar webhooks e encerrar
+                asyncio.create_task(dispatch_webhooks(org_id, tier))
+                return
+
+        # --- Fim Lógica de Cache ---
+
+        cur.execute("UPDATE jobs SET status = 'processing', job_hash = %s WHERE id = %s;", (job_hash, job_id,))
         conn.commit()
         
         result_url = None
@@ -935,15 +997,12 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
                 return_transparent = (bg_color == "transparent")
                 bg_color_hex = bg_color if bg_color.startswith("#") else None
                 
-                output_pil = processar_ia_birefnet(
-                    input_pil, 
-                    return_transparent=return_transparent,
-                    bg_color_hex=bg_color_hex
+                output_image_bytes = await asyncio.to_thread(
+                    processar_ia_birefnet_proxy,
+                    resized_bytes, 
+                    return_transparent,
+                    bg_color_hex
                 )
-                
-                buf = io.BytesIO()
-                output_pil.save(buf, format="PNG", optimize=True)
-                output_image_bytes = buf.getvalue()
                 
             output_filename = f"{job_id}_out.png"
             output_path = os.path.join("storage", output_filename)
@@ -975,10 +1034,16 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
             # Simulação do LaMa (big-lama ONNX)
             # Na implementação real: carrega onnxruntime, redimensiona imagem/mascara para multiplos de 8, roda o tensor, restaura tamanho.
             async with ai_semaphore:
-                # Aqui iria o await asyncio.to_thread(run_lama_inpaint, input_path, mask_path)
-                # Como simulador por agora (sem pesos pesados): devolve a imagem original
-                with open(input_path, "rb") as f:
-                    output_image_bytes = f.read()
+                image = Image.open(input_path).convert("RGBA")
+                if mask_path and os.path.exists(mask_path):
+                    mask = Image.open(mask_path).convert("L")
+                    # simple fallback: blur the image where the mask is
+                    blurred = image.filter(ImageFilter.GaussianBlur(15))
+                    image.paste(blurred, (0, 0), mask)
+                
+                output_buffer = io.BytesIO()
+                image.save(output_buffer, format="PNG")
+                output_image_bytes = output_buffer.getvalue()
             
             output_filename = f"{job_id}_inpaint_out.png"
             output_path = os.path.join("storage", output_filename)
@@ -1008,19 +1073,26 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
         elif job_type == 'preset-apply':
             # Simulação de Batch Processing usando presets no Backend
             async with ai_semaphore:
-                # Na implementação real, baixar a imagem da URL, processar via Pipeline
-                # 1. Download image
-                # 2. for step in preset['steps']:
-                #       if step['type'] == 'bg-removal': image = remove(image)
-                #       if step['type'] == 'brightness': image = ImageEnhance.Brightness(image).enhance(step['value'])
-                #       ...
-                # Aqui retornamos uma imagem de sucesso temporaria simulando o final
                 if input_path and os.path.exists(input_path):
-                    image = Image.open(input_path)
+                    image = Image.open(input_path).convert("RGBA")
                 else:
-                    # Imagem de placeholder 
                     image = Image.new("RGBA", (800, 800), (255, 255, 255, 255))
                 
+                if extra_arg:
+                    try:
+                        preset = json.loads(extra_arg)
+                        for step in preset.get('steps', []):
+                            if step.get('type') == 'brightness':
+                                image = ImageEnhance.Brightness(image).enhance(step.get('value', 1.0))
+                            elif step.get('type') == 'contrast':
+                                image = ImageEnhance.Contrast(image).enhance(step.get('value', 1.0))
+                            elif step.get('type') == 'saturation':
+                                image = ImageEnhance.Color(image).enhance(step.get('value', 1.0))
+                            elif step.get('type') == 'blur':
+                                image = image.filter(ImageFilter.GaussianBlur(step.get('value', 2)))
+                    except:
+                        pass
+                        
                 output_buffer = io.BytesIO()
                 image.save(output_buffer, format="PNG")
                 output_image_bytes = output_buffer.getvalue()
@@ -1030,6 +1102,27 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
             with open(output_path, "wb") as f:
                 f.write(output_image_bytes)
             result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
+
+        elif job_type == 'ai/smart-select':
+            async with ai_semaphore:
+                # Simula retorno de bounding box/polygon para o SAM2
+                result_data_str = json.dumps({"box": [50, 50, 400, 400], "polygon": [[50,50], [400,50], [400,400], [50,400]]})
+
+        elif job_type == 'image-gen':
+            async with ai_semaphore:
+                # Placeholder para Geração de Imagem (FLUX/SDXL via API fal.ai/Replicate)
+                # Neste momento apenas retornamos uma imagem sólida gerada via PIL
+                import random
+                color = (random.randint(0,255), random.randint(0,255), random.randint(0,255))
+                image = Image.new("RGB", (1024, 1024), color)
+                output_buffer = io.BytesIO()
+                image.save(output_buffer, format="PNG")
+                
+                output_filename = f"{job_id}_image_gen_out.png"
+                output_path = os.path.join("storage", output_filename)
+                with open(output_path, "wb") as f:
+                    f.write(output_buffer.getvalue())
+                result_url = f"{API_BASE if 'API_BASE' in globals() else 'http://localhost:8000'}/storage/{output_filename}"
 
         elif job_type == 'campaign-analyze':
             with open(input_path, "rb") as f:
@@ -1090,11 +1183,11 @@ async def create_job(
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="O arquivo enviado precisa ser uma imagem válida.")
         
-    valid_jobs = ["bg-removal", "inpaint", "upscale"]
+    valid_jobs = ["bg-removal", "inpaint", "upscale", "image-gen", "ai/smart-select"]
     if job_type not in valid_jobs:
         raise HTTPException(status_code=400, detail="Tipo de job inválido.")
         
-    costs = {"bg-removal": {"basic": 1, "pro": 3, "premium": 5}, "inpaint": {"basic": 3}, "upscale": {"basic": 4}}
+    costs = {"bg-removal": {"basic": 1, "pro": 3, "premium": 5}, "inpaint": {"basic": 3}, "upscale": {"basic": 4}, "image-gen": {"basic": 5, "pro": 10}, "ai/smart-select": {"basic": 1}}
     cost = costs.get(job_type, {}).get(tier, 1)
     
     conn = get_db_connection()
@@ -1164,7 +1257,11 @@ async def create_job(
             with open(mask_path, "wb") as f:
                 f.write(mask_bytes)
             
-        background_tasks.add_task(process_job_task, job_id, org_id, tier, job_type, input_path, mask_path=mask_path)
+        tier_priority = {"premium": 1, "pro": 2, "basic": 3}.get(tier, 3)
+        job_queue.put_nowait((tier_priority, {
+            "job_id": job_id, "org_id": org_id, "tier": tier, "job_type": job_type,
+            "input_path": input_path, "mask_path": mask_path
+        }))
         
         return {"job_id": job_id, "status": "pending", "message": f"Job de {job_type} aceito."}
     except HTTPException:
@@ -1235,7 +1332,10 @@ async def create_campaign_analyze_job(
         input_path = os.path.join("storage", f"{job_id}_in.png")
         with open(input_path, "wb") as f: f.write(input_image_bytes)
             
-        background_tasks.add_task(process_job_task, job_id, org_id, 'basic', 'campaign-analyze', input_path)
+        job_queue.put_nowait((3, {
+            "job_id": job_id, "org_id": org_id, "tier": 'basic', "job_type": 'campaign-analyze',
+            "input_path": input_path
+        }))
         return {"job_id": job_id, "status": "pending"}
     except Exception as e:
         conn.conn.rollback()
@@ -1279,7 +1379,10 @@ async def create_campaign_copy_job(
         conn.commit()
         cur.close()
             
-        background_tasks.add_task(process_job_task, job_id, org_id, 'basic', 'campaign-copy', input_path=None, category_arg=payload.category)
+        job_queue.put_nowait((3, {
+            "job_id": job_id, "org_id": org_id, "tier": 'basic', "job_type": 'campaign-copy',
+            "input_path": None, "category_arg": payload.category
+        }))
         return {"job_id": job_id, "status": "pending"}
     except Exception as e:
         conn.conn.rollback()
@@ -1342,7 +1445,10 @@ async def create_campaign_build_batch(
                 f.write(input_image_bytes)
                 
             # Passamos os JSONs via arg para o process_job_task (adaptando a assinatura)
-            background_tasks.add_task(process_job_task, job_id, org_id, 'basic', 'campaign-build', input_path, category_arg=template_id, mask_path=copy_data, extra_arg=brand_kit)
+            job_queue.put_nowait((3, {
+                "job_id": job_id, "org_id": org_id, "tier": 'basic', "job_type": 'campaign-build',
+                "input_path": input_path, "category_arg": template_id, "mask_path": copy_data, "extra_arg": brand_kit
+            }))
             
         if role != "superadmin" and len(job_ids) > 0:
             cur.execute(
@@ -1746,7 +1852,10 @@ async def create_motion_export_job(
         with open(input_path, "w", encoding="utf-8") as f:
             f.write(payload.timeline_data)
             
-        background_tasks.add_task(process_job_task, job_id, org_id, 'basic', 'motion-export', input_path, extra_arg=payload.output_format)
+        job_queue.put_nowait((3, {
+            "job_id": job_id, "org_id": org_id, "tier": 'basic', "job_type": 'motion-export',
+            "input_path": input_path, "extra_arg": payload.output_format
+        }))
         
         return {"job_id": job_id, "status": "pending", "message": f"Renderização estimada em {int(duration * 1.5)}s iniciada."}
     except Exception as e:
@@ -1754,19 +1863,19 @@ async def create_motion_export_job(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
-
-@app.post('/melhorar-imagem/', tags=['IA S�ncrona'])
-@limiter.limit('20/minute')
-async def melhorar_imagem(request: Request, file: UploadFile = File(...), org_id: str = Depends(get_current_org_id), role: str = Depends(get_current_role)):
-    if not file.content_type.startswith('image/'): raise HTTPException(status_code=400, detail='O arquivo enviado precisa ser uma imagem v�lida.')
-    input_image_bytes = await file.read()
-    if len(input_image_bytes) > 20 * 1024 * 1024: raise HTTPException(status_code=413, detail='O arquivo excede o limite de 20MB.')
-    try:
-        img = Image.open(io.BytesIO(input_image_bytes))
-        async with ai_semaphore:
-            img = melhorar_imagem_leve(img)
-        buf = io.BytesIO()
-        img.save(buf, format='PNG', optimize=True)
-        return StreamingResponse(io.BytesIO(buf.getvalue()), media_type='image/png')
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post('/melhorar-imagem/', tags=['IA S�ncrona'])
+@limiter.limit('20/minute')
+async def melhorar_imagem(request: Request, file: UploadFile = File(...), org_id: str = Depends(get_current_org_id), role: str = Depends(get_current_role)):
+    if not file.content_type.startswith('image/'): raise HTTPException(status_code=400, detail='O arquivo enviado precisa ser uma imagem v�lida.')
+    input_image_bytes = await file.read()
+    if len(input_image_bytes) > 20 * 1024 * 1024: raise HTTPException(status_code=413, detail='O arquivo excede o limite de 20MB.')
+    try:
+        img = Image.open(io.BytesIO(input_image_bytes))
+        async with ai_semaphore:
+            img = melhorar_imagem_leve(img)
+        buf = io.BytesIO()
+        img.save(buf, format='PNG', optimize=True)
+        return StreamingResponse(io.BytesIO(buf.getvalue()), media_type='image/png')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

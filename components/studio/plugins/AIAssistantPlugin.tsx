@@ -75,6 +75,32 @@ function AIAssistantContextPanel() {
     }
   }
 
+  const handleUpscale = async () => {
+    if (!engine || !selectedObjectId) return
+    const imageUrl = engine.getSelectedObjectImageUrl()
+    if (!imageUrl) return
+    setIsProcessingAI(true)
+    try {
+      const file = await urlToFile(imageUrl, "image.png", "image/png")
+      const response = await AIProviderManager.upscale(file, 2)
+      const { toast } = require("sonner");
+      if (response.success && response.data) {
+        engine.updateObjectImageUrl(selectedObjectId, response.data)
+        engine.requestRender()
+        EventBus.emit(StudioEvent.HISTORY_CHANGED)
+        toast.success("Upscale concluído com sucesso!")
+      } else {
+        toast.error(response.error || "Erro ao realizar upscale.")
+      }
+    } catch (error) {
+      console.error(error)
+      const { toast } = require("sonner");
+      toast.error("Ocorreu um erro ao processar a IA.")
+    } finally {
+      setIsProcessingAI(false)
+    }
+  }
+
   const handleMockAction = (name: string) => {
     alert(`Ferramenta ${name} em desenvolvimento!`)
   }
@@ -109,7 +135,7 @@ function AIAssistantContextPanel() {
         <Button 
           variant="outline" 
           className="justify-start text-left font-medium" 
-          onClick={() => handleMockAction('Upscale')}
+          onClick={() => handleUpscale()}
         >
           <ImageIcon className="h-4 w-4 mr-2" />
           Upscale (Melhorar Qualidade)

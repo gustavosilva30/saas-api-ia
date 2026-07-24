@@ -11,3 +11,6 @@ pydantic==2.7.4
 email-validator
 psutil
 numpy<2.0.0
+torch
+transformers
+pytest

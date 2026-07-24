@@ -19,6 +19,10 @@ import { AIAssistantPlugin } from "@/components/studio/plugins/AIAssistantPlugin
 
 import { AIProviderManager } from "@/lib/studio/ai/AIProviderManager"
 import { NextApiBackgroundRemovalProvider } from "@/lib/studio/ai/providers/BackgroundRemovalProvider"
+import { NextApiImageGenerationProvider } from "@/lib/studio/ai/providers/ImageGenerationProvider"
+import { NextApiInpaintingProvider } from "@/lib/studio/ai/providers/InpaintingProvider"
+import { NextApiUpscaleProvider } from "@/lib/studio/ai/providers/UpscaleProvider"
+import { NextApiSmartSelectionProvider } from "@/lib/studio/ai/providers/SmartSelectionProvider"
 
 // Registra todos os plugins disponíveis no sistema
 export function registerAllPlugins() {
@@ -43,5 +47,9 @@ export function registerAllPlugins() {
 
     // Registra os provedores de IA
     AIProviderManager.registerBgRemovalProvider(new NextApiBackgroundRemovalProvider())
+    AIProviderManager.registerImageGenerationProvider(new NextApiImageGenerationProvider())
+    AIProviderManager.registerInpaintingProvider(new NextApiInpaintingProvider())
+    AIProviderManager.registerUpscaleProvider(new NextApiUpscaleProvider())
+    AIProviderManager.registerSmartSelectionProvider(new NextApiSmartSelectionProvider())
   }
 }

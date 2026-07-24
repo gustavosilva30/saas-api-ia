@@ -16,7 +16,7 @@ export class StyleEngine {
     // But for now we just handle visual properties
 
     objectIds.forEach(id => {
-      // Aplicamos propriedades básicas
+      // Aplicamos propriedades básicas (fill, stroke, strokeWidth, rx, ry, opacity)
       const propsToUpdate: any = {};
       
       if (preset.properties.fill !== undefined) propsToUpdate.fill = preset.properties.fill;
@@ -26,15 +26,37 @@ export class StyleEngine {
       if (preset.properties.ry !== undefined) propsToUpdate.ry = preset.properties.ry;
       if (preset.properties.opacity !== undefined) propsToUpdate.opacity = preset.properties.opacity;
 
+      // Blend Mode (globalCompositeOperation)
+      if (preset.properties.blendMode) {
+        propsToUpdate.globalCompositeOperation = preset.properties.blendMode;
+      }
+
       if (Object.keys(propsToUpdate).length > 0) {
         engine.updateObjectProperties(id, propsToUpdate);
       }
       
-      // Sombras precisam de um tratamento especial pois dependem de criar instâncias no Fabric
-      // O applyShadowToSelected atua no objeto ativo. Numa implementação futura, 
-      // idealmente teremos engine.applyShadowToObject(id, shadow)
+      // Sombras
       if (preset.properties.shadow !== undefined) {
         engine.applyShadowToSelected(preset.properties.shadow);
+      }
+
+      // Filtros de Imagem (aplicar apenas em fabric.Image via adjustments)
+      if (preset.properties.filters && preset.properties.filters.length > 0) {
+        const adjustments: any = {};
+        preset.properties.filters.forEach(f => {
+          switch (f.type) {
+            case 'brightness': adjustments.brightness = f.value ?? 0; break;
+            case 'contrast': adjustments.contrast = f.value ?? 0; break;
+            case 'saturation': adjustments.saturation = f.value ?? 0; break;
+            case 'hue': adjustments.hue = f.value ?? 0; break;
+            case 'blur': adjustments.blur = f.value ?? 0; break;
+            case 'noise': adjustments.noise = f.value ?? 0; break;
+            case 'pixelate': adjustments.pixelate = f.value ?? 2; break;
+          }
+        });
+        if (Object.keys(adjustments).length > 0) {
+          engine.applyAdjustments(id, adjustments);
+        }
       }
     });
 

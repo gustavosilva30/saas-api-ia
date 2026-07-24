@@ -53,6 +53,16 @@ export interface IRenderEngine {
   setBackgroundColor(color: string): void;
 
   /**
+   * Define um gradiente como fundo.
+   */
+  setBackgroundGradient(config: { type: 'linear'|'radial', colorStops: {offset: number, color: string}[], coords?: any }): void;
+
+  /**
+   * Aplica múltiplos ajustes (filtros) a um objeto de uma vez.
+   */
+  applyAdjustments(id: string, adjustments: Record<string, any>): void;
+
+  /**
    * Define uma imagem de fundo, ajustando para cobrir/preencher o canvas.
    */
   setBackgroundImage(url: string): Promise<void>;

@@ -46,8 +46,8 @@ function ExportSidebar() {
           // Por enquanto, usamos a funcionalidade exportImage nativa
         }
 
-        const dataUrl = engine.exportImage({ format: format === 'webp' ? 'png' : format, multiplier: quality })
-        const base64Data = dataUrl.replace(/^data:image\/(png|jpeg);base64,/, "")
+        const dataUrl = engine.exportImage({ format: format, multiplier: quality })
+        const base64Data = dataUrl.replace(/^data:image\/(png|jpeg|webp);base64,/, "")
         zip.file(`${preset.name.replace(" ", "_")}.${format}`, base64Data, { base64: true })
       }
       

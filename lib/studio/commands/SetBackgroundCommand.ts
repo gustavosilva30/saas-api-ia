@@ -2,15 +2,15 @@ import { ICommand } from './ICommand';
 import { useStudioStore } from '@/store/useStudioStore';
 
 export class SetBackgroundCommand implements ICommand {
-  private prevColor: string | null;
+  private prevColor: any | null;
   private prevImage: string | null;
-  private newColor: string | null;
+  private newColor: any | null;
   private newImage: string | null;
 
   constructor(
-    newColor: string | null,
+    newColor: any | null,
     newImage: string | null,
-    prevColor: string | null,
+    prevColor: any | null,
     prevImage: string | null
   ) {
     this.newColor = newColor;
@@ -36,7 +36,11 @@ export class SetBackgroundCommand implements ICommand {
     } else {
       engine.clearBackgroundImage();
       if (this.newColor) {
-        engine.setBackgroundColor(this.newColor);
+        if (typeof this.newColor === 'string') {
+          engine.setBackgroundColor(this.newColor);
+        } else if (typeof this.newColor === 'object' && this.newColor !== null) {
+          engine.setBackgroundGradient(this.newColor);
+        }
       }
     }
   }
@@ -50,7 +54,11 @@ export class SetBackgroundCommand implements ICommand {
     } else {
       engine.clearBackgroundImage();
       if (this.prevColor) {
-        engine.setBackgroundColor(this.prevColor);
+        if (typeof this.prevColor === 'string') {
+          engine.setBackgroundColor(this.prevColor);
+        } else if (typeof this.prevColor === 'object' && this.prevColor !== null) {
+          engine.setBackgroundGradient(this.prevColor);
+        }
       }
     }
   }
