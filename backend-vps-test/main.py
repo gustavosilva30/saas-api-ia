@@ -347,6 +347,30 @@ def startup_db_setup():
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS document_versions (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                state JSONB NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS templates (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                name VARCHAR(255) NOT NULL,
+                category VARCHAR(100) NOT NULL,
+                industry VARCHAR(100) DEFAULT 'general',
+                width INT DEFAULT 1080,
+                height INT DEFAULT 1080,
+                state JSONB NOT NULL,
+                thumbnail TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
         conn.commit()
 
         # Seed Marketplace Items
@@ -1688,6 +1712,101 @@ def get_brand_kit(org_id: str = Depends(get_current_org_id)):
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao obter Brand Kit: {str(e)}")
+    finally:
+        conn.close()
+
+# --- Document Versions (Histórico de Versões) Endpoints ---
+class VersionPayload(BaseModel):
+    name: str
+    state: dict
+
+@app.get("/history/versions", tags=["Histórico"], summary="Obter Versões do Documento da Organização")
+def get_versions(org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, name, state, created_at FROM document_versions WHERE organization_id = %s ORDER BY created_at DESC;", (org_id,))
+        return cur.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter versões: {str(e)}")
+    finally:
+        conn.close()
+
+@app.post("/history/versions", tags=["Histórico"], summary="Salvar Nova Versão do Documento")
+def create_version(payload: VersionPayload, org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            "INSERT INTO document_versions (organization_id, name, state) VALUES (%s, %s, %s) RETURNING id, name, created_at;",
+            (org_id, payload.name, json.dumps(payload.state))
+        )
+        version = cur.fetchone()
+        conn.commit()
+        return version
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar versão: {str(e)}")
+    finally:
+        conn.close()
+
+# --- Templates Endpoints ---
+class TemplatePayload(BaseModel):
+    name: str
+    category: str
+    industry: str
+    width: int
+    height: int
+    state: dict
+    thumbnail: str = ""
+
+@app.get("/templates", tags=["Templates"], summary="Obter Templates Disponíveis")
+def get_templates(category: str = None, industry: str = None):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        query = "SELECT id, name, category, industry, width, height, state, thumbnail, created_at FROM templates"
+        params = []
+        
+        conditions = []
+        if category:
+            conditions.append("category = %s")
+            params.append(category)
+        if industry:
+            conditions.append("industry = %s")
+            params.append(industry)
+            
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+            
+        query += " ORDER BY created_at DESC;"
+        
+        cur.execute(query, tuple(params))
+        return cur.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter templates: {str(e)}")
+    finally:
+        conn.close()
+
+@app.post("/templates", tags=["Templates"], summary="Criar/Publicar Novo Template")
+def create_template(payload: TemplatePayload):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            INSERT INTO templates (name, category, industry, width, height, state, thumbnail)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, name, category, created_at;
+            """,
+            (payload.name, payload.category, payload.industry, payload.width, payload.height, json.dumps(payload.state), payload.thumbnail)
+        )
+        tpl = cur.fetchone()
+        conn.commit()
+        return tpl
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao criar template: {str(e)}")
     finally:
         conn.close()
 
