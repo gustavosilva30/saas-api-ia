@@ -1186,4 +1186,69 @@ export class FabricAdapter implements IRenderEngine {
 
     return { imageFile, maskFile };
   }
+
+  magicResize(targetWidth: number, targetHeight: number): void {
+    if (!this.canvas) return;
+
+    const oldWidth = this.canvas.width || 800;
+    const oldHeight = this.canvas.height || 600;
+
+    // Fatores de proporção
+    const scaleX = targetWidth / oldWidth;
+    const scaleY = targetHeight / oldHeight;
+
+    // Define novo tamanho do Canvas
+    this.canvas.setWidth(targetWidth);
+    this.canvas.setHeight(targetHeight);
+
+    const objects = this.canvas.getObjects();
+
+    objects.forEach(obj => {
+      // 1. Caso seja imagem de fundo (background image esticada) ou elemento posicionado como background cover
+      const isBackground = obj.get('name') === 'background' || (obj as any).isBackground;
+      
+      if (isBackground) {
+        // Redimensionamento estilo cover
+        const currentScaleX = obj.scaleX || 1;
+        const currentScaleY = obj.scaleY || 1;
+        
+        // Coeficiente de cobertura
+        const fitScale = Math.max(scaleX, scaleY);
+        obj.set({
+          scaleX: currentScaleX * fitScale,
+          scaleY: currentScaleY * fitScale,
+          left: targetWidth / 2,
+          top: targetHeight / 2,
+          originX: 'center',
+          originY: 'center'
+        });
+      } else {
+        // 2. Elementos flutuantes (textos, logos, figuras)
+        // Reposicionamento inteligente proporcional baseado nas coordenadas relativas ao centro
+        const objLeft = obj.left || 0;
+        const objTop = obj.top || 0;
+        
+        // Mantém a proporção do centro do objeto em relação ao centro do Canvas
+        const relativeX = objLeft - (oldWidth / 2);
+        const relativeY = objTop - (oldHeight / 2);
+        
+        // Escala o tamanho do objeto proporcionalmente ao menor fator de escala do canvas (evitando distorção)
+        const elementScale = Math.min(scaleX, scaleY);
+        const currentScaleX = obj.scaleX || 1;
+        const currentScaleY = obj.scaleY || 1;
+
+        obj.set({
+          left: (targetWidth / 2) + (relativeX * scaleX),
+          top: (targetHeight / 2) + (relativeY * scaleY),
+          scaleX: currentScaleX * elementScale,
+          scaleY: currentScaleY * elementScale
+        });
+      }
+
+      obj.setCoords(); // Atualiza os limites de bounding box
+    });
+
+    this.canvas.requestRenderAll();
+    EventBus.emit(StudioEvent.HISTORY_CHANGED);
+  }
 }

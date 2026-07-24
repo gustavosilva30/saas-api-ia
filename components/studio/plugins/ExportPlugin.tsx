@@ -32,25 +32,39 @@ function ExportSidebar() {
     if (selectedPresets.length === 0) return alert("Selecione pelo menos um formato.")
     
     setIsExporting(true)
+    const { toast } = require("sonner")
+    toast.info("Iniciando redimensionamento inteligente e exportação em lote...")
+
     try {
       const zip = new JSZip()
       
+      // Salva o estado do documento e as dimensões originais do canvas
+      const originalDoc = engine.exportDocument()
+      const originalWidth = engine.canvas?.width || 800
+      const originalHeight = engine.canvas?.height || 600
+
       for (const presetId of selectedPresets) {
         const preset = PRESETS.find(p => p.id === presetId)
         if (!preset) continue
         
-        // Aplica transparência de fundo antes de exportar se necessário
-        let oldBg = "";
-        if (transparent && (format === "png" || format === "webp")) {
-          // Precisaríamos pegar o background atual e setar transparente. 
-          // Por enquanto, usamos a funcionalidade exportImage nativa
-        }
+        // Aplica o Magic Resize para o formato do preset
+        engine.magicResize(preset.width, preset.height)
+        engine.requestRender()
+
+        // Aguarda renderizar
+        await new Promise(r => setTimeout(r, 100))
 
         const dataUrl = engine.exportImage({ format: format, multiplier: quality })
         const base64Data = dataUrl.replace(/^data:image\/(png|jpeg|webp);base64,/, "")
         zip.file(`${preset.name.replace(" ", "_")}.${format}`, base64Data, { base64: true })
       }
       
+      // Restaura o estado original do canvas
+      await engine.loadDocument(originalDoc)
+      engine.canvas?.setWidth(originalWidth)
+      engine.canvas?.setHeight(originalHeight)
+      engine.requestRender()
+
       const content = await zip.generateAsync({ type: "blob" })
       
       // Download
@@ -61,13 +75,11 @@ function ExportSidebar() {
       link.click()
       document.body.removeChild(link)
       
-      const { toast } = require("sonner");
-      toast.success("Exportação concluída com sucesso!")
+      toast.success("Variações de tamanho exportadas com sucesso!")
       
     } catch (e) {
       console.error(e)
-      const { toast } = require("sonner");
-      toast.error("Erro ao exportar o documento.")
+      toast.error("Erro ao exportar as variações.")
     } finally {
       setIsExporting(false)
     }

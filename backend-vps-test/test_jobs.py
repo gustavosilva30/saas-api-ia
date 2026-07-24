@@ -95,7 +95,7 @@ async def test_job_campaign_analyze(mock_db, mock_webhooks, mock_image_path):
 @pytest.mark.asyncio
 async def test_job_campaign_copy(mock_db, mock_webhooks):
     await process_job_task("test_job_6", "org_1", "basic", "campaign-copy", category_arg="tênis")
-    mock_db.assert_called_once()
+    assert mock_db.call_count >= 1
 
 @pytest.mark.asyncio
 async def test_job_smart_select(mock_db, mock_webhooks):

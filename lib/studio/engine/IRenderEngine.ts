@@ -177,6 +177,9 @@ export interface IRenderEngine {
   stopInpaintBrush(): void;
   getInpaintMaskAndImage(): Promise<{ imageFile: File, maskFile: File } | null>;
 
+  // Magic Resize (Redimensionamento Inteligente)
+  magicResize(targetWidth: number, targetHeight: number): void;
+
   // Persistência de Estado (Document Model)
   exportDocument(): StudioDocument;
   loadDocument(document: StudioDocument): Promise<void>;

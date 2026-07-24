@@ -333,6 +333,20 @@ def startup_db_setup():
                 UNIQUE(organization_id, item_id)
             );
         """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS brand_kits (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                organization_id UUID NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+                name VARCHAR(255) DEFAULT 'Minha Marca',
+                colors JSONB DEFAULT '[]',
+                typography JSONB DEFAULT '{"primary": "Inter", "secondary": "Roboto"}',
+                logos JSONB DEFAULT '{"light": "", "dark": "", "icon": ""}',
+                tone_of_voice VARCHAR(255) DEFAULT 'professional',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
         conn.commit()
 
         # Seed Marketplace Items
@@ -910,8 +924,22 @@ def vision_analyze_mock(input_image_bytes):
         "confidence": 0.85
     }
 
-def ollama_generate_copy(category: str):
-    prompt = f"Gere uma cópia comercial em JSON para um produto da categoria: {category}. Inclua as chaves: title, subtitle, description, benefits (array), cta, hashtags, platformSpecific (objeto com instagram, mercadolivre, facebook) e seoKeywords (array)."
+def ollama_generate_copy(category: str, org_id: str = None):
+    tone_of_voice = "professional"
+    if org_id:
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT tone_of_voice FROM brand_kits WHERE organization_id = %s;", (org_id,))
+            row = cur.fetchone()
+            if row:
+                tone_of_voice = row[0]
+        except Exception as e:
+            print(f"Erro ao buscar tom de voz para a cópia: {e}")
+        finally:
+            conn.close()
+
+    prompt = f"Gere uma cópia comercial em JSON para um produto da categoria: {category}. Escreva no tom de voz: {tone_of_voice}. Inclua exatamente as chaves: title, subtitle, description, benefits (array de strings), cta, hashtags, platformSpecific (objeto com instagram, mercadolivre, facebook) e seoKeywords (array de strings)."
     try:
         endpoint = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434/api/generate")
         res = requests.post(endpoint, json={
@@ -1135,7 +1163,7 @@ async def process_job_task(job_id: str, org_id: str, tier: str, job_type: str, i
 
         elif job_type == 'campaign-copy':
             async with ai_semaphore:
-                data = await asyncio.to_thread(ollama_generate_copy, category_arg or "Genérico")
+                data = await asyncio.to_thread(ollama_generate_copy, category_arg or "Genérico", org_id)
             result_data_str = json.dumps(data)
             
         elif job_type == 'motion-export':
@@ -1630,6 +1658,68 @@ def get_resources():
         "memory_used_mb": psutil.virtual_memory().used / (1024 * 1024),
         "memory_total_mb": psutil.virtual_memory().total / (1024 * 1024)
     }
+
+# --- Brand Kit Endpoints ---
+class BrandKitPayload(BaseModel):
+    name: str
+    colors: list
+    typography: dict
+    logos: dict
+    tone_of_voice: str
+
+@app.get("/brand-kit", tags=["Brand Kit"], summary="Obter Brand Kit da Organização")
+def get_brand_kit(org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id, name, colors, typography, logos, tone_of_voice FROM brand_kits WHERE organization_id = %s;", (org_id,))
+        brand_kit = cur.fetchone()
+        
+        # Se não existir, criamos um padrão de forma não-destrutiva
+        if not brand_kit:
+            cur.execute(
+                "INSERT INTO brand_kits (organization_id, name, colors, typography, logos, tone_of_voice) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, name, colors, typography, logos, tone_of_voice;",
+                (org_id, "Minha Marca", json.dumps([]), json.dumps({"primary": "Inter", "secondary": "Roboto"}), json.dumps({"light": "", "dark": "", "icon": ""}), "professional")
+            )
+            brand_kit = cur.fetchone()
+            conn.commit()
+            
+        return brand_kit
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao obter Brand Kit: {str(e)}")
+    finally:
+        conn.close()
+
+@app.post("/brand-kit", tags=["Brand Kit"], summary="Salvar/Atualizar Brand Kit da Organização")
+def save_brand_kit(payload: BrandKitPayload, org_id: str = Depends(get_current_org_id)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # Tenta dar UPDATE, se não existir faz INSERT (upsert)
+        cur.execute(
+            """
+            INSERT INTO brand_kits (organization_id, name, colors, typography, logos, tone_of_voice, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (organization_id) DO UPDATE
+            SET name = EXCLUDED.name,
+                colors = EXCLUDED.colors,
+                typography = EXCLUDED.typography,
+                logos = EXCLUDED.logos,
+                tone_of_voice = EXCLUDED.tone_of_voice,
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING id, name, colors, typography, logos, tone_of_voice;
+            """,
+            (org_id, payload.name, json.dumps(payload.colors), json.dumps(payload.typography), json.dumps(payload.logos), payload.tone_of_voice)
+        )
+        brand_kit = cur.fetchone()
+        conn.commit()
+        return brand_kit
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar Brand Kit: {str(e)}")
+    finally:
+        conn.close()
 
 # --- Presets / Recipes ---
 class PresetPayload(BaseModel):

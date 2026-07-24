@@ -23,6 +23,8 @@ import { NextApiImageGenerationProvider } from "@/lib/studio/ai/providers/ImageG
 import { NextApiInpaintingProvider } from "@/lib/studio/ai/providers/InpaintingProvider"
 import { NextApiUpscaleProvider } from "@/lib/studio/ai/providers/UpscaleProvider"
 import { NextApiSmartSelectionProvider } from "@/lib/studio/ai/providers/SmartSelectionProvider"
+import { BrandKitPlugin } from "@/components/studio/plugins/BrandKitPlugin"
+import { BulkCreatePlugin } from "@/components/studio/plugins/BulkCreatePlugin"
 
 // Registra todos os plugins disponíveis no sistema
 export function registerAllPlugins() {
@@ -32,6 +34,8 @@ export function registerAllPlugins() {
     PluginManager.register(TemplatesPlugin)
     PluginManager.register(ComponentsLibraryPlugin)
     PluginManager.register(StylesLibraryPlugin)
+    PluginManager.register(BrandKitPlugin) // Novo plugin de Identidade de Marca
+    PluginManager.register(BulkCreatePlugin) // Novo plugin de Produção em Lote (Bulk Create)
     PluginManager.register(AIAssistantPlugin)
     PluginManager.register(BackgroundPlugin)
     PluginManager.register(ShadowPlugin)
