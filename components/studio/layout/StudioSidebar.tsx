@@ -1,6 +1,7 @@
 "use client"
 import React, { useState } from "react"
 import { useStudioStore } from "@/store/useStudioStore"
+import { useWorkspaceStore } from "@/store/useWorkspaceStore"
 import { PluginManager } from "@/lib/studio/plugins/PluginManager"
 import { registerAllPlugins } from "@/lib/studio/plugins/pluginRegistry"
 import { Button } from "@/components/ui/button"
@@ -28,6 +29,9 @@ export function StudioSidebar() {
   const plugins = PluginManager.getAllPlugins();
   const activePlugin = useStudioStore((state) => state.activePlugin);
   const setActivePlugin = useStudioStore((state) => state.setActivePlugin);
+  const leftPanelOpen = useWorkspaceStore((state) => state.leftPanelOpen);
+
+  if (!leftPanelOpen) return null;
 
   // Agrupar plugins
   const groupedPlugins = plugins.reduce((acc, plugin) => {

@@ -4,15 +4,19 @@ import { PluginManager } from "@/lib/studio/plugins/PluginManager"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ObjectInspector } from "@/components/studio/inspector/ObjectInspector"
+import { useWorkspaceStore } from "@/store/useWorkspaceStore"
 
 export function StudioPropertiesPanel() {
   const plugins = PluginManager.getAllPlugins();
   const contextualPlugins = plugins.filter(p => p.ContextComponent);
+  const { rightPanelOpen, activeTabRight, setActiveTabRight } = useWorkspaceStore();
+
+  if (!rightPanelOpen) return null;
 
   return (
     <div className="w-80 border-l bg-background flex flex-col shrink-0 z-10">
       {contextualPlugins.length > 0 ? (
-        <Tabs defaultValue="properties" className="flex flex-col h-full w-full">
+        <Tabs value={activeTabRight} onValueChange={setActiveTabRight} className="flex flex-col h-full w-full">
           <div className="px-4 pt-3 pb-2 border-b">
             <TabsList className="w-full grid grid-cols-5 h-9">
               <TabsTrigger value="properties" className="text-xs">Prop</TabsTrigger>

@@ -8,10 +8,19 @@ import { EventBus, StudioEvent } from "@/lib/studio/events/EventBus"
 import { globalCommandManager } from "@/lib/studio/commands/GlobalCommandManager"
 import { AddImageCommand } from "@/lib/studio/commands/AddImageCommand"
 import { useAssetStore } from "@/store/useAssetStore"
+import { useWorkspaceStore, WorkspaceMode } from "@/store/useWorkspaceStore"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Layout } from "lucide-react"
 
 export function StudioTopbar() {
   const localCommandManager = globalCommandManager;
   const engine = useStudioStore((state) => state.engine)
+  const { mode: workspaceMode, setMode: setWorkspaceMode } = useWorkspaceStore()
   
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
@@ -78,18 +87,25 @@ export function StudioTopbar() {
   }
 
   const handleExportVideo = async () => {
-    // Princípio 7: Processamento Assíncrono (Job System)
     setIsExportingVideo(true)
     try {
-      // Simula o enfileiramento do Job no backend
       await new Promise(resolve => setTimeout(resolve, 1500))
-      alert("Sucesso! Job de renderização de vídeo enfileirado. Você será notificado quando o MP4 estiver pronto.")
+      alert("Sucesso! Job de renderização de vídeo enfileirado.")
     } catch (error) {
       alert("Falha ao agendar renderização de vídeo.")
     } finally {
       setIsExportingVideo(false)
     }
   }
+
+  const workspaces: { value: WorkspaceMode, label: string }[] = [
+    { value: 'Designer', label: 'Designer Pro' },
+    { value: 'SocialMedia', label: 'Social Media' },
+    { value: 'Marketplace', label: 'Marketplace' },
+    { value: 'Motion', label: 'Motion & Animação' },
+    { value: 'Fotografia', label: 'Retoque de Foto' },
+    { value: 'Compacto', label: 'Modo Foco (Compacto)' }
+  ]
 
   return (
     <div className="h-14 border-b bg-background flex items-center justify-between px-4 shrink-0 z-10">
@@ -102,7 +118,23 @@ export function StudioTopbar() {
         <div className="h-6 w-px bg-border"></div>
         <div className="flex items-center gap-2">
           <ImageIcon className="h-5 w-5 text-primary" />
-          <span className="font-semibold text-sm">AI Studio</span>
+          <span className="font-semibold text-sm mr-4">AI Studio</span>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 hidden md:flex items-center gap-2">
+                <Layout className="h-4 w-4 text-muted-foreground" />
+                {workspaces.find(w => w.value === workspaceMode)?.label || 'Workspace'}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              {workspaces.map((w) => (
+                <DropdownMenuItem key={w.value} onClick={() => setWorkspaceMode(w.value)}>
+                  {w.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       
