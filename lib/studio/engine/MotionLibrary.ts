@@ -40,5 +40,7 @@ export const MotionLibrary: Record<string, MotionAnimation> = {
   // Ênfase
   "pulse": { id: "pulse", name: "Pulse", category: "Ênfase", defaultDuration: 1000, defaultEasing: "easeInOutSine", keyframes: [{ property: "scaleX", from: 1, to: 1.1 }, { property: "scaleY", from: 1, to: 1.1 }] },
   "shake": { id: "shake", name: "Shake", category: "Ênfase", defaultDuration: 500, defaultEasing: "linear", keyframes: [{ property: "left", from: -10, to: 10 }] },
-  "swing": { id: "swing", name: "Swing", category: "Ênfase", defaultDuration: 800, defaultEasing: "easeInOutSine", keyframes: [{ property: "angle", from: -15, to: 15 }] }
+  "swing": { id: "swing", name: "Swing", category: "Ênfase", defaultDuration: 800, defaultEasing: "easeInOutSine", keyframes: [{ property: "angle", from: -15, to: 15 }] },
+  "spring": { id: "spring", name: "Spring Bounce", category: "Ênfase", defaultDuration: 1200, defaultEasing: "easeOutElastic", keyframes: [{ property: "scaleX", from: 0.8, to: 1 }, { property: "scaleY", from: 0.8, to: 1 }, { property: "top", from: -30, to: 0 }] },
+  "parallax-up": { id: "parallax-up", name: "Parallax Up", category: "Entrada", defaultDuration: 1500, defaultEasing: "easeOutCubic", keyframes: [{ property: "top", from: 100, to: 0 }, { property: "opacity", from: 0, to: 1 }] }
 };
